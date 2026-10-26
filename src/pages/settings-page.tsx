@@ -16,6 +16,7 @@ import { useDemoAccountId } from '@/hooks/use-demo';
 import { NdflSettings } from '@/components/settings/ndfl-settings';
 import { ExchangeRatesSettings } from '@/components/settings/exchange-rates-settings';
 import { PrivacyCard } from '@/components/settings/privacy-card';
+import { StorageStatusRow } from '@/components/settings/storage-status';
 
 function RowIcon({ children, tone = 'gold' }: { children: React.ReactNode; tone?: 'gold' | 'danger' }) {
   return (
@@ -84,8 +85,9 @@ export function SettingsPage() {
 
       <ExchangeRatesSettings />
 
-      <Section title="Данные" description="Портфель хранится только на этом устройстве. Бэкап — единственный способ перенести его на другой телефон или вернуть, если браузер очистит данные.">
+      <Section title="Данные" description="Бэкап — единственный способ перенести портфель на другой телефон или вернуть его, если браузер очистит данные.">
         <Card className="overflow-hidden">
+          <StorageStatusRow />
           <ListRow
             leading={<RowIcon><Download /></RowIcon>}
             title="Скачать бэкап"

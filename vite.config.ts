@@ -7,6 +7,16 @@ import path from 'path';
 
 const base = process.env.BASE_URL ?? '/';
 
+// Node 25+ has its own global `localStorage` (undefined without --localstorage-file).
+// Vitest 4 then keeps it instead of happy-dom's, so tests see no localStorage.
+// Turn Node's Web Storage off in test workers; drop this after moving to Vitest 5.
+const nodeFlags = process.allowedNodeEnvironmentFlags;
+const noNodeWebStorage = nodeFlags.has('--webstorage')
+  ? ['--no-webstorage']
+  : nodeFlags.has('--experimental-webstorage')
+    ? ['--no-experimental-webstorage']
+    : [];
+
 export default defineConfig({
   base,
   plugins: [
@@ -50,6 +60,7 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./tests/setup.ts'],
+    execArgv: noNodeWebStorage,
     exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**'],
   },
 });

@@ -7,6 +7,8 @@ import { IncomeHero, type IncomePeriod } from '@/components/main/income-hero';
 import { IncomeDynamicsChart } from '@/components/main/income-dynamics-chart';
 import { UpcomingPayments } from '@/components/main/upcoming-payments';
 import { IncomeStructure } from '@/components/main/income-structure';
+import { GoalPath } from '@/components/main/goal-path';
+import { GoalSheet } from '@/components/main/goal-sheet';
 import { Wordmark } from '@/components/ds/brand-mark';
 import { Section, EmptyState } from '@/components/ds/surface';
 import { Button } from '@/components/ds/button';
@@ -18,6 +20,8 @@ import { useInstallPrompt } from '@/hooks/use-install-prompt';
 import { useDemoAccountId } from '@/hooks/use-demo';
 import { useBackupReminder } from '@/hooks/use-backup-reminder';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
+import { useIncomeGoal } from '@/hooks/use-income-goal';
+import { setIncomeGoal } from '@/services/income-goal';
 import { InstallButton } from '@/components/install-button';
 import { upcomingPayments } from '@/services/income-projection';
 import { loadDemoPortfolio, removeDemoPortfolio } from '@/services/demo-portfolio';
@@ -44,6 +48,8 @@ export function MainPage() {
   const { toast, confirm } = useFeedback();
   const backup = useBackupReminder();
   const ndflRates = useNdflRates();
+  const goal = useIncomeGoal();
+  const [goalOpen, setGoalOpen] = useState(false);
   // The hero promises "after tax" only when some rate is actually set for the categories held.
   const taxed = categories.some((c) => (ndflRates.get(c.type) ?? 0) > 0);
 
@@ -159,6 +165,27 @@ export function MainPage() {
             onModeChange={changeMode}
             animate={animate}
             taxed={taxed}
+            footer={
+              <GoalPath
+                incomePerMonth={isLoading ? null : portfolio.totalIncomePerMonth}
+                goalPerMonth={goal}
+                mode={mode}
+                animate={animate}
+                onEdit={() => setGoalOpen(true)}
+              />
+            }
+          />
+          <GoalSheet
+            open={goalOpen}
+            onOpenChange={setGoalOpen}
+            goalPerMonth={goal ?? null}
+            incomePerMonth={portfolio.totalIncomePerMonth ?? 0}
+            taxed={taxed}
+            onSave={async (next) => {
+              const had = goal != null;
+              await setIncomeGoal(next);
+              toast(next == null ? 'Цель убрана' : had ? 'Цель обновлена' : 'Цель поставлена');
+            }}
           />
 
           <div className="mt-8" style={animate ? { animation: 'hi-fade-slide-up 0.7s var(--hi-ease-out) 0.65s both' } : undefined}>

@@ -3,6 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script>
+    /* iOS/iPadOS only: stop Safari from zooming the page in when a field gets focus. The zoom
+       stays after the field loses focus and the app then looks wider than the screen; it hits
+       16px fields too when the page rests below 100% (Safari page zoom, shrink to fit). Safari
+       ignores maximum-scale for pinch gestures, so people can still zoom. Android honours it and
+       would lose pinch zoom, so it keeps the plain viewport. Checked by tests/index-html-viewport.test.ts. */
+    (function () {
+      var ua = navigator.userAgent;
+      if (/iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) {
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (meta) meta.setAttribute('content', meta.getAttribute('content') + ', maximum-scale=1');
+      }
+    })();
+  </script>
   <meta name="theme-color" content="#0b0a08" />
   <meta name="color-scheme" content="dark" />
   <meta name="description" content="Рантье — учёт пассивного дохода: сколько денег в месяц приносит ваш капитал" />

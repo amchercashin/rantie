@@ -61,6 +61,7 @@ export default defineConfig({
     environment: 'happy-dom',
     setupFiles: ['./tests/setup.ts'],
     execArgv: noNodeWebStorage,
-    exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**'],
+    // .claude/ holds other sessions' worktrees, each with its own tests and node_modules.
+    exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**', '.claude/**'],
   },
 });

@@ -23,10 +23,13 @@ export const DEFAULT_NDFL_RATE = 13;
  * default must be filled in here — this is the one place the app reads rates from.
  */
 export async function getNdflRates(): Promise<Map<string, number>> {
-  const [rows, types] = await Promise.all([
+  // Plain reads only: Safari can fail an index cursor (`orderBy('type').uniqueKeys()`) with
+  // "UnknownError: Unable to open cursor" after assets are deleted, and the app then never starts.
+  const [rows, assets] = await Promise.all([
     db.table('settings').toArray() as Promise<{ key: string; value: string }[]>,
-    db.assets.orderBy('type').uniqueKeys(),
+    db.assets.toArray(),
   ]);
+  const types = new Set(assets.map((a) => a.type));
   const map = new Map<string, number>();
   for (const row of rows) {
     if (row.key.startsWith(NDFL_PREFIX)) {

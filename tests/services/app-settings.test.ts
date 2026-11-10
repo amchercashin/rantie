@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { db } from '@/db/database';
 import { updateAppSetting, getNdflRates, updateNdflRate, DEFAULT_NDFL_RATE } from '@/services/app-settings';
 import { createAssetDraft } from '@/services/asset-factory';
@@ -16,6 +16,16 @@ describe('app-settings', () => {
   });
 
   describe('ndfl rates', () => {
+    it('reads rates without index cursors, which Safari can fail after the demo is removed', async () => {
+      await db.assets.add(createAssetDraft({ type: "Облигации", name: "ОФЗ", dataSource: "manual" }));
+      const broken = vi.spyOn(db.assets, 'orderBy').mockImplementation(() => {
+        throw new DOMException('Unable to open cursor', 'UnknownError');
+      });
+      const rates = await getNdflRates();
+      expect(rates.get('Облигации')).toBe(DEFAULT_NDFL_RATE);
+      broken.mockRestore();
+    });
+
     it('returns empty map when no rates are set', async () => {
       const rates = await getNdflRates();
       expect(rates.size).toBe(0);

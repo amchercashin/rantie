@@ -46,6 +46,7 @@ Every income-related field on `Asset` tracks its origin:
 - `paymentPerUnitSource`: `'fact'` (calculated from payment history) or `'manual'` (user override)
 - `frequencySource`: `'moex'` or `'manual'`
 - `quantitySource`: `'import'` or `'manual'`
+- `ExchangeRate.source`: `'moex'` (indicative rates from MOEX ISS, refreshed by `refreshExchangeRates()` at the start of every sync — even with no exchange-traded assets — and after adding a foreign-currency asset) or `'manual'` (typed in Настройки → Курсы валют, never overwritten; «с биржи» resets it). A foreign asset without a rate is flagged `rateMissing` and left out of the totals; `MissingRateNotice` says so instead of showing 0 ₽.
 
 Manual values override calculated ones. Reset buttons revert to the calculated/imported value.
 

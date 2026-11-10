@@ -6,7 +6,7 @@ import {
   calcYieldPercent,
   type PaymentRecord,
 } from './income-calculator';
-import { getRateToRub } from './exchange-rates';
+import { getRateToRub, normalizeCurrency } from './exchange-rates';
 import { incomeSpreadOf } from '@/models/asset-kind';
 
 export interface CalculatedAssetStats extends AssetStats {
@@ -16,12 +16,16 @@ export interface CalculatedAssetStats extends AssetStats {
   incomePerYear: number;
   currency: string;
   rateToRub: number;
+  /** Foreign currency without a rate: value and income are unknown, not zero. */
+  rateMissing: boolean;
 }
 
 export interface PortfolioSnapshot {
   portfolio: PortfolioStats;
   categories: CategoryStats[];
   assetsById: Map<number, CalculatedAssetStats>;
+  /** Held currencies with no rate to the ruble — those assets are left out of the totals. */
+  missingRates: string[];
 }
 
 export interface PortfolioCalculationInput {
@@ -55,6 +59,7 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
   let totalIncomePerMonth = 0;
   const assetsById = new Map<number, CalculatedAssetStats>();
   const categoryMap = new Map<string, { value: number; incomePerMonth: number; count: number }>();
+  const missingRates = new Set<string>();
 
   for (const asset of input.assets) {
     const assetId = asset.id;
@@ -63,6 +68,8 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
     const totalQuantity = quantityByAsset.get(assetId) ?? 0;
     const currency = asset.currency ?? 'RUB';
     const rateToRub = getRateToRub(currency, input.exchangeRates);
+    const rateMissing = rateToRub <= 0;
+    if (rateMissing && totalQuantity > 0) missingRates.add(normalizeCurrency(currency));
     const price = asset.currentPrice ?? 0;
     const nkd = asset.type === 'Облигации' ? (asset.accruedInterest ?? 0) : 0;
     const value = (price + nkd) * totalQuantity * rateToRub;
@@ -92,6 +99,7 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
       portfolioSharePercent: 0,
       currency,
       rateToRub,
+      rateMissing,
     });
 
     const category = categoryMap.get(asset.type);
@@ -131,5 +139,5 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
   }
   categories.sort((a, b) => b.totalIncomePerMonth - a.totalIncomePerMonth);
 
-  return { portfolio, categories, assetsById };
+  return { portfolio, categories, assetsById, missingRates: [...missingRates].sort() };
 }

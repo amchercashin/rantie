@@ -173,4 +173,25 @@ describe('backup v3', () => {
       source: 'manual',
     });
   });
+
+  it('keeps where an exchange rate came from', async () => {
+    const json = JSON.stringify({
+      version: 4,
+      accounts: [],
+      assets: [],
+      holdings: [],
+      paymentHistory: [],
+      importRecords: [],
+      settings: [],
+      exchangeRates: [
+        { currency: 'USD', rateToRub: 82.5, updatedAt: new Date().toISOString(), source: 'moex' },
+        { currency: 'EUR', rateToRub: 95, updatedAt: new Date().toISOString() },
+      ],
+    });
+
+    await importAllData(json);
+
+    expect(await db.exchangeRates.get('USD')).toMatchObject({ source: 'moex' });
+    expect(await db.exchangeRates.get('EUR')).toMatchObject({ source: 'manual' });
+  });
 });

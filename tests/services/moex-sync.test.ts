@@ -23,6 +23,7 @@ vi.mock('@/services/moex-api', () => ({
   fetchCouponHistory: vi.fn().mockResolvedValue([]),
   fetchBatchStockPrices: vi.fn().mockResolvedValue(new Map()),
   fetchBatchBondData: vi.fn().mockResolvedValue(new Map()),
+  fetchIndicativeRates: vi.fn().mockResolvedValue(null),
   chunk: vi.fn((arr: unknown[], size: number) => {
     const result: unknown[][] = [];
     for (let i = 0; i < arr.length; i += size) {
@@ -37,6 +38,7 @@ import {
   fetchDividends,
   fetchBatchStockPrices,
   fetchBatchBondData,
+  fetchIndicativeRates,
 } from '@/services/moex-api';
 import { isDohodAvailable, fetchDohodDividends, findFundKey, fetchFundDistributions } from '@/services/heroincome-data';
 import { syncAllAssets, getLastSyncAt, getLastPriceSyncAt } from '@/services/moex-sync';
@@ -157,6 +159,32 @@ describe('syncAllAssets', () => {
     expect(asset!.frequencyPerYear).toBe(2); // 365/182 ≈ 2
     expect(asset!.frequencySource).toBe('moex');
     expect(asset!.nextExpectedDate).toEqual(new Date('2026-06-03'));
+  });
+
+  it('loads exchange rates even when nothing is exchange-traded (USD crypto only)', async () => {
+    await db.assets.add({
+      type: 'Крипта', name: 'stETH', currency: 'USD', dataSource: 'manual',
+      paymentPerUnit: 40, createdAt: new Date(), updatedAt: new Date(),
+      ...ASSET_DEFAULTS, paymentPerUnitSource: 'manual',
+    });
+    (fetchIndicativeRates as Mock).mockResolvedValueOnce(new Map([['USD', 82.55]]));
+
+    const result = await syncAllAssets({ pricesOnly: true });
+
+    expect(fetchIndicativeRates).toHaveBeenCalledTimes(1);
+    expect(result.ratesUpdated).toEqual(['USD']);
+    expect(await db.exchangeRates.get('USD')).toMatchObject({ rateToRub: 82.55, source: 'moex' });
+  });
+
+  it('warns when a held currency still has no rate after the sync', async () => {
+    await db.assets.add({
+      type: 'Крипта', name: 'stETH', currency: 'USD', dataSource: 'manual',
+      createdAt: new Date(), updatedAt: new Date(), ...ASSET_DEFAULTS,
+    });
+
+    const result = await syncAllAssets();
+
+    expect(result.warnings.some((w) => w.includes('USD'))).toBe(true);
   });
 
   it('skips non-exchange assets (realestate, deposit, other)', async () => {

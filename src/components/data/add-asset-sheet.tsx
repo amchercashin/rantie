@@ -4,6 +4,7 @@ import { addHolding } from '@/hooks/use-holdings';
 import { getTypeSuggestions, getTypeColor } from '@/models/account';
 import { useSyncContext } from '@/contexts/sync-context';
 import { addAssetKindOf, buildAssetFromForm } from '@/services/add-asset-form';
+import { refreshExchangeRates } from '@/services/exchange-rates';
 import { BottomSheet } from '@/components/ds/bottom-sheet';
 import { Button } from '@/components/ds/button';
 import { Field, TextInput, SelectInput, parseDecimal } from '@/components/ds/field';
@@ -68,6 +69,7 @@ export function AddAssetSheet({ open, onClose, accountId, existingTypes }: AddAs
     onClose();
     toast(`Добавлено: ${asset.name}`);
     if (kind === 'security') syncAsset(assetId); // fire-and-forget: price + payments from MOEX
+    if (asset.currency !== 'RUB') void refreshExchangeRates(); // fire-and-forget: rate to the ruble from MOEX
   };
 
   return (

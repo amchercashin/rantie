@@ -42,4 +42,14 @@ describe('buildAssetFromForm', () => {
     expect(r.asset).toMatchObject({ currency: 'USD', currentPrice: 100, paymentPerUnit: 12, paymentPerUnitSource: 'manual', ticker: undefined });
     expect(r.averagePrice).toBe(100);
   });
+
+  it('other: an empty quantity means one unit, as the placeholder promises', () => {
+    const r = buildAssetFromForm({ ...base, type: 'Крипта', name: 'stETH', currency: 'USD', quantity: NaN, annualIncome: 40 });
+    expect(r.quantity).toBe(1);
+  });
+
+  it('other: an explicit zero stays zero; securities still need a quantity', () => {
+    expect(buildAssetFromForm({ ...base, type: 'Крипта', name: 'stETH', quantity: 0 }).quantity).toBe(0);
+    expect(buildAssetFromForm({ ...base, ticker: 'SBER', quantity: NaN }).quantity).toBe(0);
+  });
 });

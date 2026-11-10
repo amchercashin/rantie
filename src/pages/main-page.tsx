@@ -13,6 +13,7 @@ import { Wordmark } from '@/components/ds/brand-mark';
 import { Section, EmptyState } from '@/components/ds/surface';
 import { Button } from '@/components/ds/button';
 import { Hint } from '@/components/ds/hint';
+import { MissingRateNotice } from '@/components/shared/missing-rate-notice';
 import { useFeedback } from '@/components/ds/feedback';
 import { TransitionLink } from '@/components/ui/transition-link';
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
@@ -40,7 +41,7 @@ function readPeriod(): IncomePeriod {
 
 export function MainPage() {
   const [mode, setMode] = useState<IncomePeriod>(readPeriod);
-  const { portfolio, categories, assets, projection, timeline, isLoading } = usePortfolioStats({ withTimeline: true });
+  const { portfolio, categories, missingRates, assets, projection, timeline, isLoading } = usePortfolioStats({ withTimeline: true });
   const animate = useRef(!hasVisitedMainPage).current;
   const install = useInstallPrompt();
   const demoAccountId = useDemoAccountId();
@@ -135,6 +136,14 @@ export function MainPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {!isLoading && !isEmpty && (
+        <MissingRateNotice
+          currencies={missingRates}
+          description="Активы в этой валюте не попали в доход и стоимость портфеля."
+          className="mb-4 animate-[hi-fade-slide-down_0.4s_var(--hi-ease-out)_both]"
+        />
       )}
 
       {isEmpty ? (

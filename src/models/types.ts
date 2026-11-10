@@ -4,7 +4,8 @@ export interface ExchangeRate {
   currency: string;
   rateToRub: number;
   updatedAt: Date;
-  source: 'manual';
+  /** 'moex' — loaded automatically and refreshed on sync; 'manual' — typed by the user, never overwritten. */
+  source: 'moex' | 'manual';
 }
 
 export interface Asset {

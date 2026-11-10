@@ -201,6 +201,39 @@ async function fetchISS(
   }
 }
 
+// ============ Exchange Rates ============
+
+/**
+ * MOEX indicative rates (used for derivatives clearing): USD, EUR, CNY, GBP and
+ * other currencies against the ruble, twice a day. Picks the latest rate of each
+ * X/RUB pair; cross rates and empty values are skipped.
+ */
+export function parseIndicativeRates(json: unknown): Map<string, number> {
+  const block = (json as { securities?: ISSBlock } | null | undefined)?.securities;
+  if (!block?.columns || !Array.isArray(block.data)) return new Map();
+
+  const latest = new Map<string, { at: string; rate: number }>();
+  for (const row of parseISSBlock(block)) {
+    const pair = /^([A-Z]{3})\/RUB$/.exec(String(row.secid ?? ''));
+    if (!pair || row.rate == null) continue;
+    const rate = Number(row.rate);
+    if (!isFinite(rate) || rate <= 0) continue;
+    const at = `${row.tradedate ?? ''} ${row.tradetime ?? ''}`;
+    const prev = latest.get(pair[1]);
+    if (!prev || at > prev.at) latest.set(pair[1], { at, rate });
+  }
+  return new Map([...latest].map(([currency, { rate }]) => [currency, rate]));
+}
+
+/** Currency → rubles per unit, or null when MOEX is unreachable or returned nothing. */
+export async function fetchIndicativeRates(): Promise<Map<string, number> | null> {
+  const data = await fetchISS('/statistics/engines/futures/markets/indicativerates/securities.json', {
+    'iss.only': 'securities',
+  });
+  const rates = parseIndicativeRates(data);
+  return rates.size > 0 ? rates : null;
+}
+
 // ============ Paginated ISS Fetch ============
 
 // MOEX ISS default page size; used as threshold for pagination detection

@@ -72,7 +72,10 @@ export function buildAssetFromForm(form: AddAssetForm, now: Date = new Date()): 
     };
   }
 
-  const quantity = valid(form.quantity) && form.quantity > 0 ? form.quantity : 0;
+  // The "other" form shows «1» as the placeholder, so an empty field means one unit, not zero.
+  const quantity = valid(form.quantity)
+    ? Math.max(form.quantity, 0)
+    : kind === 'other' ? 1 : 0;
   const averagePrice = valid(form.totalCost) ? (quantity > 0 ? form.totalCost / quantity : form.totalCost) : undefined;
   const currentPrice = kind === 'other' && valid(form.value) ? form.value : averagePrice;
   const annualIncome = kind === 'other' && valid(form.annualIncome) ? form.annualIncome : undefined;

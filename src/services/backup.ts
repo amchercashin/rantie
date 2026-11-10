@@ -209,7 +209,7 @@ function parseExchangeRate(value: unknown, index: number): ExchangeRate {
     currency: normalizeCurrency(parseString(row.currency, `exchangeRates[${index}].currency`)),
     rateToRub: parseNumber(row.rateToRub, `exchangeRates[${index}].rateToRub`),
     updatedAt: parseDate(row.updatedAt, `exchangeRates[${index}].updatedAt`),
-    source: 'manual',
+    source: row.source === 'moex' ? 'moex' : 'manual',
   };
 }
 

@@ -13,6 +13,8 @@ export function SyncButton() {
     if (!result) return;
     if (result.failed > 0) toast(`Не удалось обновить: ${result.errors.slice(0, 2).join(', ')}`, 'error');
     else if (result.synced > 0) toast('Цены и выплаты обновлены');
+    else if (result.ratesUpdated.length > 0) toast('Курсы валют обновлены');
+    else if (result.warnings.length > 0) toast(result.warnings[0], 'info');
     else toast('Нет биржевых активов для обновления', 'info');
   };
 

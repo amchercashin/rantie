@@ -287,7 +287,7 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
               value={aiText}
               onChange={(e) => setAiText(e.target.value)}
               placeholder="Вставьте Markdown-таблицу из ответа AI..."
-              className="font-mono text-[14px]"
+              className="font-mono"
             />
           </Field>
           {enriching && <Working text="Определяю бумаги на Мосбирже…" />}

@@ -157,6 +157,10 @@
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     overscroll-behavior: none;
+    /* Nothing may widen the page: iOS Safari would shrink it to fit and zoom back in on the
+       next field focus. `clip` (not `hidden`) creates no scroll container, so sticky and fixed
+       elements keep working; horizontal scrollers inside still scroll on their own. */
+    overflow-x: clip;
   }
   /* Desktop: no text I-beam over read-only numbers; hand cursor on everything tappable. */
   body {

@@ -4,10 +4,9 @@ import { Button } from '@/components/ds/button';
 import { Field, TextArea, TextInput } from '@/components/ds/field';
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { parseSberHTML, extractAgreementNumber } from '@/services/sber-html-parser';
-import { parseMDTable } from '@/services/import-parser';
-import { computeImportDiff } from '@/services/import-diff';
-import { applyImportDiff } from '@/services/import-applier';
-import type { ImportDiff } from '@/services/import-diff';
+import { parseMDTable, type ImportAssetRow } from '@/services/import-parser';
+import { planImport, SeveralAccountsError, type AccountImport } from '@/services/import-plan';
+import { applyImportPlan } from '@/services/import-applier';
 import type { ImportRecord } from '@/models/types';
 import { ImportPreview } from './import-preview';
 import { Landmark, Bot, ArrowLeft, Copy, Check, ShieldAlert } from 'lucide-react';
@@ -25,19 +24,24 @@ interface ImportFlowProps {
 
 type Step = 'method' | 'ai' | 'preview';
 
-const AI_PROMPT = `Преобразуй данные из отчёта брокера в Markdown-таблицу:
+const AI_PROMPT = `Преобразуй позиции из отчёта брокера в одну Markdown-таблицу:
 
-| Тикер | ISIN | Название | Тип | Кол-во | Ср.цена | Валюта |
-|-------|------|----------|-----|--------|---------|--------|
+| Счёт | Тикер | ISIN | Название | Тип | Кол-во | Ср.цена | Номинал | Валюта |
+|------|-------|------|----------|-----|--------|---------|---------|--------|
 
 Правила:
-- Тип: акция, облигация, фонд
-- Ср.цена: средняя цена покупки (₽). Для облигаций — в % от номинала, как в отчёте
-- Валюта: RUB, USD, EUR, CNY или другая валюта из отчёта. Если не указана, оставь пустой
-- ISIN: международный идентификатор бумаги
+- Счёт: название счёта из отчёта (например, «ИИС» или «Брокерский»), одинаковое у всех его бумаг. Если счёт один — тоже заполни
+- Одна строка — одна бумага на одном счёте. Денежные остатки не включай
+- ISIN — как в отчёте. Тикер — только если он есть в отчёте, не угадывай
+- Тип: акция, облигация или фонд
+- Кол-во: штук на конец периода
+- Ср.цена: средняя цена покупки одной бумаги в валюте бумаги. Для облигаций — в % от номинала, как в отчёте, без НКД
+- Номинал: только для облигаций — номинал одной бумаги
+- Валюта: RUB, USD, EUR, CNY или другой код из отчёта
+- Числа без разделителей тысяч, дробная часть через точку
 - Если данных нет, оставь ячейку пустой
 
-Ответ — ТОЛЬКО блок кода с таблицей, без пояснений`;
+Ответ — только таблица в блоке кода, без пояснений`;
 
 function MethodButton({ icon: Icon, label, desc, onClick }: {
   icon: React.ComponentType<{ className?: string }>;
@@ -87,9 +91,9 @@ function Working({ text }: { text: string }) {
 
 export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlowProps) {
   const [step, setStep] = useState<Step>('method');
-  const [diff, setDiff] = useState<ImportDiff | null>(null);
-  const [suggestedName, setSuggestedName] = useState('');
-  const [editableName, setEditableName] = useState('');
+  const [plan, setPlan] = useState<AccountImport[] | null>(null);
+  // Editable names, parallel to plan (used for new accounts only)
+  const [names, setNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [importSource, setImportSource] = useState<ImportRecord['source']>('sber_html');
@@ -101,9 +105,8 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
 
   const reset = useCallback(() => {
     setStep('method');
-    setDiff(null);
-    setSuggestedName('');
-    setEditableName('');
+    setPlan(null);
+    setNames([]);
     setError(null);
     setApplying(false);
     setImportSource('sber_html');
@@ -117,16 +120,10 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
     onClose();
   };
 
-  const setDefaultName = (name: string) => {
-    if (accountId === null) {
-      setSuggestedName(name);
-      setEditableName(name);
-    }
-  };
-
-  const goToPreview = async (rows: import('@/services/import-parser').ImportAssetRow[]) => {
-    const importDiff = await computeImportDiff(rows, accountId);
-    setDiff(importDiff);
+  const goToPreview = async (rows: ImportAssetRow[], defaultName: string) => {
+    const importPlan = await planImport(rows, { accountId, defaultName });
+    setPlan(importPlan);
+    setNames(importPlan.map((a) => a.name));
     setStep('preview');
   };
 
@@ -144,19 +141,14 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
         return;
       }
 
-      if (accountId === null) {
-        const agreement = extractAgreementNumber(html);
-        const name = agreement ? `Сбер / ${agreement}` : 'Новый счёт';
-        setDefaultName(name);
-      }
+      const agreement = extractAgreementNumber(html);
+      const defaultName = agreement ? `Сбер / ${agreement}` : 'Новый счёт';
 
       setImportSource('sber_html');
       setEnriching(true);
       try {
-        const enriched = await enrichFromMoex(rows);
-        await goToPreview(enriched);
-      } catch {
-        await goToPreview(rows);
+        const enriched = await enrichFromMoex(rows).catch(() => rows);
+        await goToPreview(enriched, defaultName);
       } finally {
         setEnriching(false);
       }
@@ -176,29 +168,31 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
         setError('Не удалось распознать таблицу. Убедитесь что вставлен Markdown-ответ AI.');
         return;
       }
-      setDefaultName('Новый счёт');
       setImportSource('ai_import');
       setEnriching(true);
       try {
-        const enriched = await enrichFromMoex(rows);
-        await goToPreview(enriched);
-      } catch {
-        await goToPreview(rows);
+        const enriched = await enrichFromMoex(rows).catch(() => rows);
+        await goToPreview(enriched, 'Новый счёт');
       } finally {
         setEnriching(false);
       }
-    } catch {
-      setError('Ошибка при разборе текста');
+    } catch (e) {
+      setError(e instanceof SeveralAccountsError
+        ? `В таблице несколько счетов (${e.accountNames.join(', ')}). Здесь можно обновить только «${accountName}» — оставьте в таблице его строки или импортируйте через «Импорт отчёта» на вкладке Счета.`
+        : 'Ошибка при разборе текста');
     }
   };
 
   // --- Apply ---
   const handleApply = async () => {
-    if (!diff) return;
+    if (!plan) return;
     setApplying(true);
     try {
-      const name = accountId === null ? editableName.trim() || suggestedName : undefined;
-      const { newAssetIds } = await applyImportDiff(diff, importSource, name);
+      const targets = plan.map((a, i) => ({
+        diff: a.diff,
+        accountName: a.accountId === null ? names[i]?.trim() || a.name : undefined,
+      }));
+      const { newAssetIds } = await applyImportPlan(targets, importSource);
       handleClose();
       triggerSync();
 
@@ -237,7 +231,7 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
       title={title}
       description={description}
       footer={
-        step === 'preview' && diff ? (
+        step === 'preview' && plan ? (
           <div className="flex gap-2">
             <Button variant="secondary" size="lg" onClick={handleClose} className="flex-1">Отмена</Button>
             <Button variant="primary" size="lg" onClick={handleApply} loading={applying} className="flex-[2]">
@@ -301,14 +295,26 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
         </div>
       )}
 
-      {step === 'preview' && diff && (
-        <div className="space-y-4">
-          {accountId === null && (
-            <Field label="Название счёта">
-              <TextInput value={editableName} onChange={(e) => setEditableName(e.target.value)} />
-            </Field>
-          )}
-          <ImportPreview diff={diff} />
+      {step === 'preview' && plan && (
+        <div className="space-y-6">
+          {plan.map((account, i) => (
+            <div key={i} className="space-y-3">
+              {account.accountId === null ? (
+                <Field label={plan.length > 1 ? 'Новый счёт' : 'Название счёта'}>
+                  <TextInput
+                    value={names[i] ?? ''}
+                    onChange={(e) => setNames((prev) => prev.map((n, j) => (j === i ? e.target.value : n)))}
+                  />
+                </Field>
+              ) : plan.length > 1 || accountId === null ? (
+                <div className="px-1">
+                  <div className="hi-eyebrow text-[var(--hi-text-3)]">Обновится счёт</div>
+                  <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">{account.name}</div>
+                </div>
+              ) : null}
+              <ImportPreview diff={account.diff} />
+            </div>
+          ))}
           {error && <p className="px-1 text-[length:var(--hi-text-caption)] text-[var(--hi-negative)]">{error}</p>}
         </div>
       )}

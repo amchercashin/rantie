@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useCountUp } from '@/hooks/use-count-up';
 import { TransitionLink } from '@/components/ui/transition-link';
 import { Segmented } from '@/components/ds/segmented';
@@ -17,6 +18,8 @@ interface IncomeHeroProps {
   animate?: boolean;
   /** False when every NDFL rate in play is 0% — the amount is then gross, and the label says so. */
   taxed?: boolean;
+  /** Lower half of the summary card — the way to the income goal. */
+  footer?: ReactNode;
 }
 
 function splitAmount(value: number | null): { digits: string; empty: boolean } {
@@ -24,7 +27,7 @@ function splitAmount(value: number | null): { digits: string; empty: boolean } {
   return { digits: formatCurrencyFull(value).replace(`${NBSP}₽`, ''), empty: false };
 }
 
-export function IncomeHero({ income, incomePerYear, yieldPercent, totalValue, mode, onModeChange, animate = true, taxed = true }: IncomeHeroProps) {
+export function IncomeHero({ income, incomePerYear, yieldPercent, totalValue, mode, onModeChange, animate = true, taxed = true, footer }: IncomeHeroProps) {
   const animated = useCountUp(income, animate);
   const { digits } = splitAmount(animated);
   const perDay = incomePerYear != null && incomePerYear > 0 ? incomePerYear / 365 : null;
@@ -90,21 +93,24 @@ export function IncomeHero({ income, incomePerYear, yieldPercent, totalValue, mo
       </div>
 
       <div
-        className="relative mx-auto mt-6 grid max-w-[340px] grid-cols-2 divide-x divide-[var(--hi-line)] rounded-2xl border border-[var(--hi-line)] bg-[color-mix(in_srgb,var(--hi-surface)_70%,transparent)] py-3"
+        className="relative mx-auto mt-6 max-w-[340px] overflow-hidden rounded-2xl border border-[var(--hi-line)] bg-[color-mix(in_srgb,var(--hi-surface)_70%,transparent)]"
         {...a('hi-fade-slide-up 0.6s var(--hi-ease-out) 0.55s both')}
       >
-        <div>
-          <div className="hi-eyebrow">Доходность</div>
-          <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">
-            {formatPercent(yieldPercent)}
+        <div className="grid grid-cols-2 divide-x divide-[var(--hi-line)] py-3">
+          <div>
+            <div className="hi-eyebrow">Доходность</div>
+            <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">
+              {formatPercent(yieldPercent)}
+            </div>
+          </div>
+          <div>
+            <div className="hi-eyebrow">Капитал</div>
+            <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">
+              {formatCurrency(totalValue)}
+            </div>
           </div>
         </div>
-        <div>
-          <div className="hi-eyebrow">Капитал</div>
-          <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">
-            {formatCurrency(totalValue)}
-          </div>
-        </div>
+        {footer && <div className="border-t border-[var(--hi-line)]">{footer}</div>}
       </div>
     </section>
   );

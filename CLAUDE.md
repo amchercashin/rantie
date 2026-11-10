@@ -116,7 +116,7 @@ Apply via `text-[length:var(--hi-text-heading)]`. Prefer a token over hardcoded 
 - **Path alias** — `@/*` maps to `src/*`.
 - **Tests** — in `tests/` mirroring `src/` structure. Use `fake-indexeddb` for DB tests. Pure function tests dominate; a few component tests in `tests/components/`. Pin the clock (`vi.setSystemTime`) in tests with dates relative to "today".
 - **Dexie transactions** — asset mutations (`addAsset`, `updateAsset`, `deleteAsset`) are wrapped in Dexie transactions in `use-assets.ts`.
-- **iOS hardening** — `viewport-fit=cover` in index.html, `touch-action: manipulation` on html, `font-size: 16px` on all inputs (prevents Safari auto-zoom), safe-area insets for bottom sheets. Do not remove these.
+- **iOS hardening** — `viewport-fit=cover` in index.html, `touch-action: manipulation` on html, `font-size: 16px` on all inputs (prevents Safari auto-zoom, which stays after blur and makes the page look wider than the screen; never give an input/textarea/select a smaller text class or a `--hi-text-heading`/`body`/`caption`/`micro` token — `tests/components/form-control-font-size.test.ts` enforces it), safe-area insets for bottom sheets. Do not remove these.
 - **Navigation** — use `TransitionLink` (not `Link`) for in-app navigation; use `withViewTransition(cb, direction)` for programmatic `navigate()` calls.
 - **Feedback** — confirmations via `useFeedback().confirm()`, results via `toast()`; first-use explanations via `<Hint id="…">`, not overlays.
 - **Docs lookup** — при работе с Dexie, Tailwind v4, React Router v7 и shadcn/ui сверяйся с актуальной документацией через context7, а не полагайся на обучающие данные.

@@ -168,7 +168,9 @@
   input:not([type="checkbox"]):not([type="radio"]):not([type="date"]), textarea {
     cursor: text;
   }
-  /* iOS auto-zoom prevention — safety net for inputs without explicit Tailwind font-size */
+  /* iOS auto-zoom prevention — safety net for inputs without explicit Tailwind font-size.
+     A text-size class at a call site wins over this rule, so
+     tests/components/form-control-font-size.test.ts fails on any control set under 16px. */
   input, textarea, select {
     font-size: 16px;
   }

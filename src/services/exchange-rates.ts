@@ -3,9 +3,22 @@ import type { ExchangeRate } from '@/models/types';
 
 export const BASE_CURRENCY = 'RUB';
 
+/**
+ * Spellings brokers and AI use for the same currency. RUR/SUR are the old ruble
+ * codes still found in reports and on MOEX; an unknown code would get no rate
+ * and value the asset at zero.
+ */
+const CURRENCY_ALIASES: Record<string, string> = {
+  RUR: 'RUB', SUR: 'RUB', '₽': 'RUB', 'РУБ': 'RUB', 'РУБ.': 'RUB', 'РУБЛЬ': 'RUB', 'РУБЛИ': 'RUB', 'РУБЛЕЙ': 'RUB',
+  '$': 'USD', 'ДОЛЛАР': 'USD', 'ДОЛЛ.': 'USD',
+  '€': 'EUR', 'ЕВРО': 'EUR',
+  '¥': 'CNY', 'ЮАНЬ': 'CNY', 'ЮАНИ': 'CNY', 'ЮАНЕЙ': 'CNY',
+};
+
 export function normalizeCurrency(currency: string | undefined | null): string {
   const normalized = currency?.trim().toUpperCase();
-  return normalized || BASE_CURRENCY;
+  if (!normalized) return BASE_CURRENCY;
+  return CURRENCY_ALIASES[normalized] ?? normalized;
 }
 
 export function ratesArrayToMap(rates: ExchangeRate[]): Map<string, number> {

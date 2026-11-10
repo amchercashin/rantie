@@ -1,7 +1,7 @@
 import { db } from '@/db/database';
 import type { Asset } from '@/models/types';
 import type { Holding } from '@/models/account';
-import type { ImportAssetRow } from './import-parser';
+import { prepareImportRows, type ImportAssetRow } from './import-parser';
 
 export interface DiffChange {
   field: string;
@@ -26,9 +26,11 @@ export interface ImportDiff {
 }
 
 export async function computeImportDiff(
-  rows: ImportAssetRow[],
+  importedRows: ImportAssetRow[],
   accountId: number | null,
 ): Promise<ImportDiff> {
+  const rows = prepareImportRows(importedRows);
+
   // 1. Load all assets (for global ticker/isin matching)
   const allAssets = await db.assets.toArray();
   const byTicker = new Map<string, Asset>();

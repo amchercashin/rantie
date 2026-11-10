@@ -13,6 +13,7 @@ import {
   chunk,
   fetchBatchStockPrices,
   fetchBatchBondData,
+  parseIndicativeRates,
 } from '@/services/moex-api';
 
 describe('parseISSBlock', () => {
@@ -597,3 +598,36 @@ describe('fetchISS signal passing', () => {
     expect(callArgs[1]).toHaveProperty('signal');
   });
 });
+
+describe('parseIndicativeRates', () => {
+  it('takes the latest clearing rate of each X/RUB pair', () => {
+    const json = {
+      securities: {
+        columns: ['tradedate', 'tradetime', 'secid', 'rate', 'clearing'],
+        data: [
+          ['2026-11-10', '14:00:00', 'CNY/RUB', 12.3908, 'tc'],
+          ['2026-11-10', '19:00:00', 'CNY/RUB', 12.421, 'mc'],
+          ['2026-11-10', '19:00:00', 'USD/RUB', 82.5486, 'mc'],
+          ['2026-11-10', '14:00:00', 'USD/RUB', 82.7536, 'tc'],
+          ['2026-11-09', '19:00:00', 'EUR/RUB', 91.1, 'mc'],
+          ['2026-11-10', '14:00:00', 'EUR/RUB', 92.3944, 'tc'],
+          ['2026-11-10', '14:00:00', 'EUR/USD', 1.12, 'tc'],
+          ['2026-11-10', '14:00:00', 'GBP/RUB', 0, 'tc'],
+          ['2026-11-10', '14:00:00', 'JPY/RUB', null, 'tc'],
+        ],
+      },
+    };
+
+    expect(parseIndicativeRates(json)).toEqual(new Map([
+      ['CNY', 12.421],
+      ['USD', 82.5486],
+      ['EUR', 92.3944],
+    ]));
+  });
+
+  it('returns an empty map for a response without the block', () => {
+    expect(parseIndicativeRates({})).toEqual(new Map());
+    expect(parseIndicativeRates(null)).toEqual(new Map());
+  });
+});
+

@@ -20,6 +20,7 @@ import {
   findFundKey,
   fetchFundDistributions,
 } from '@/services/heroincome-data';
+import { refreshExchangeRates } from '@/services/exchange-rates';
 
 // ============ Concurrency Helper ============
 
@@ -53,6 +54,8 @@ export interface SyncResult {
   skipped: number;
   errors: string[];
   warnings: string[];
+  /** Currencies whose MOEX rate was refreshed. */
+  ratesUpdated: string[];
 }
 
 const LAST_FULL_SYNC_KEY = 'lastSyncAt';
@@ -71,8 +74,16 @@ export function isSyncable(asset: Asset): boolean {
 
 export async function syncAllAssets(options?: { pricesOnly?: boolean }): Promise<SyncResult> {
   const assets = await db.assets.toArray();
-  const result: SyncResult = { synced: 0, failed: 0, skipped: 0, errors: [], warnings: [] };
+  const result: SyncResult = { synced: 0, failed: 0, skipped: 0, errors: [], warnings: [], ratesUpdated: [] };
   resetDohodCache();
+
+  // Rates first and regardless of exchange-traded assets: a portfolio of USD crypto
+  // has nothing to sync on MOEX but still needs the rate to count in rubles.
+  const rates = await refreshExchangeRates();
+  result.ratesUpdated = rates.updated;
+  if (rates.missing.length > 0) {
+    result.warnings.push(`Нет курса ${rates.missing.join(', ')} — укажите его в Настройках`);
+  }
 
   // Filter syncable assets
   const syncable = assets.filter(isSyncable);

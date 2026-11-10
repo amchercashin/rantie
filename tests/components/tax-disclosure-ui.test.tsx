@@ -102,6 +102,7 @@ describe('tax disclosure UI', () => {
             portfolioSharePercent: 70.9,
             currency: 'RUB',
             rateToRub: 1,
+            rateMissing: false,
           }}
         />
       </MemoryRouter>,

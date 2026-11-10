@@ -64,6 +64,42 @@ describe('portfolio-calculator', () => {
     expect(snapshot.assetsById.get(1)?.rateToRub).toBe(90);
   });
 
+  it('flags a foreign asset whose rate is unknown instead of hiding it as zero', () => {
+    const snapshot = calculatePortfolioSnapshot({
+      assets: [
+        asset({ id: 1, type: 'Крипта', currentPrice: 3000, currency: 'USD', paymentPerUnit: 40, paymentPerUnitSource: 'manual' }),
+        asset({ id: 2, currentPrice: 100, paymentPerUnit: 12, paymentPerUnitSource: 'manual' }),
+        asset({ id: 3, type: 'Крипта', currency: 'EUR', paymentPerUnit: 10, paymentPerUnitSource: 'manual' }),
+      ],
+      holdings: [holding({ id: 1, assetId: 1, quantity: 1 }), holding({ id: 2, assetId: 2, quantity: 10 })],
+      paymentHistory: [],
+      ndflRates: new Map(),
+      exchangeRates: new Map(),
+      now: new Date('2026-04-28'),
+    });
+
+    expect(snapshot.assetsById.get(1)?.rateMissing).toBe(true);
+    expect(snapshot.assetsById.get(2)?.rateMissing).toBe(false);
+    // Not held (no holdings) — nothing is lost from the total, so no portfolio-level warning.
+    expect(snapshot.missingRates).toEqual(['USD']);
+  });
+
+  it('counts a USD crypto asset with a manual monthly income once the rate is known', () => {
+    const snapshot = calculatePortfolioSnapshot({
+      assets: [asset({ id: 1, type: 'Крипта', currentPrice: 3000, currency: 'USD', paymentPerUnit: 40, paymentPerUnitSource: 'manual' })],
+      holdings: [holding({ assetId: 1, quantity: 1 })],
+      paymentHistory: [],
+      ndflRates: new Map([['Крипта', 13]]),
+      exchangeRates: new Map([['USD', 82.5]]),
+      now: new Date('2026-04-28'),
+    });
+
+    expect(snapshot.assetsById.get(1)?.rateMissing).toBe(false);
+    expect(snapshot.missingRates).toEqual([]);
+    expect(snapshot.portfolio.totalIncomePerMonth).toBeCloseTo((40 / 12) * 0.87 * 82.5);
+    expect(snapshot.portfolio.totalValue).toBeCloseTo(3000 * 82.5);
+  });
+
   it('uses fact payments, excludes forecasts, and applies NDFL', () => {
     const history: PaymentHistory[] = [
       { assetId: 1, amount: 10, date: new Date('2026-01-01'), type: 'dividend', dataSource: 'moex' },

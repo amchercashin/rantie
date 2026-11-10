@@ -11,6 +11,8 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
   portfolio: PortfolioStats;
   categories: CategoryStats[];
   assetsById: Map<number, CalculatedAssetStats>;
+  /** Held currencies with no rate to the ruble (left out of the totals). */
+  missingRates: string[];
   assets: Asset[];
   /** Projected net payments for the next 12 months, soonest first. */
   projection: ProjectedPayment[];
@@ -39,7 +41,7 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
       ndflRates: ndflRates ?? new Map<string, number>(),
       exchangeRates: ratesArrayToMap(exchangeRates ?? []),
     };
-    const { portfolio, categories, assetsById } = calculatePortfolioSnapshot(input);
+    const { portfolio, categories, assetsById, missingRates } = calculatePortfolioSnapshot(input);
     const projectionInput = {
       assets: input.assets,
       paymentHistory: input.paymentHistory,
@@ -48,6 +50,6 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
     };
     const projection = projectIncome(projectionInput);
     const timeline = withTimeline && !isLoading ? incomeTimeline(projectionInput) : [];
-    return { portfolio, categories, assetsById, assets: input.assets, projection, timeline, isLoading };
+    return { portfolio, categories, assetsById, missingRates, assets: input.assets, projection, timeline, isLoading };
   }, [assets, holdings, allHistory, ndflRates, exchangeRates, isLoading, withTimeline]);
 }

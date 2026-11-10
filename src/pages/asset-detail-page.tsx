@@ -12,6 +12,7 @@ import { SourceBadge } from '@/components/ds/badge';
 import { BottomSheet } from '@/components/ds/bottom-sheet';
 import { Button } from '@/components/ds/button';
 import { Hint } from '@/components/ds/hint';
+import { MissingRateNotice } from '@/components/shared/missing-rate-notice';
 import { useAsset, updateAsset } from '@/hooks/use-assets';
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
@@ -19,6 +20,7 @@ import { usePaymentHistory } from '@/hooks/use-payment-history';
 import { useHoldingsByAsset } from '@/hooks/use-holdings';
 import { useAccounts } from '@/hooks/use-accounts';
 import { calcAssetAnnualIncomePerUnit } from '@/services/income-calculator';
+import { normalizeCurrency } from '@/services/exchange-rates';
 import { incomeSpreadOf, isExchangeTraded } from '@/models/asset-kind';
 import {
   cn, formatCurrency, formatCurrencyFull, formatFrequency, formatLongDate, formatMoney, formatNumber, formatNumericDate, formatPrice,
@@ -96,17 +98,27 @@ export function AssetDetailPage() {
   // "на 1 бумагу" for securities, "на 1 шт" for several units, nothing for a single object.
   const perUnitLabel = exchange ? 'на 1 бумагу' : totalQuantity === 1 ? '' : 'на 1 шт';
   const taxed = (ndflRates.get(asset.type) ?? 0) > 0;
+  // Without a rate the ruble figures are unknown — show dashes, not a misleading 0 ₽.
+  const rateMissing = stats?.rateMissing ?? false;
 
   return (
     <AppShell back={`/category/${encodeURIComponent(asset.type)}`} title={asset.name} subtitle={identifiers}>
       <SummaryCard
-        incomePerMonth={stats?.incomePerMonth ?? 0}
-        totalValue={stats?.value ?? 0}
-        yieldPercent={stats?.yieldPercent ?? null}
-        portfolioSharePercent={stats?.portfolioSharePercent ?? null}
+        incomePerMonth={rateMissing ? null : stats?.incomePerMonth ?? 0}
+        totalValue={rateMissing ? null : stats?.value ?? 0}
+        yieldPercent={rateMissing ? null : stats?.yieldPercent ?? null}
+        portfolioSharePercent={rateMissing ? null : stats?.portfolioSharePercent ?? null}
         badges={<SourceBadge source={isManual ? 'manual' : 'fact'} />}
         taxed={taxed}
       />
+
+      {rateMissing && (
+        <MissingRateNotice
+          currencies={[normalizeCurrency(currency)]}
+          description="Без него доход и стоимость не пересчитать в рубли, и актив не попадает в итог портфеля."
+          className="mt-4"
+        />
+      )}
 
       <Section title="Как считать доход" className="mt-8">
         <Card className="overflow-hidden">
@@ -233,7 +245,7 @@ export function AssetDetailPage() {
           />
           <ListRow
             title="Стоимость"
-            trailing={<span className="font-semibold text-[var(--hi-text)]">{formatCurrency(stats?.value ?? null)}</span>}
+            trailing={<span className="font-semibold text-[var(--hi-text)]">{formatCurrency(rateMissing ? null : stats?.value ?? null)}</span>}
           />
           {costBasis > 0 && (
             <ListRow

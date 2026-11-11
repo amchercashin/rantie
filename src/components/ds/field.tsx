@@ -1,6 +1,7 @@
 import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isTouchPrimary } from '@/lib/input-device';
 
 const CONTROL =
   'w-full rounded-2xl border border-[var(--hi-line)] bg-[var(--hi-surface)] px-4 text-base text-[var(--hi-text)] ' +
@@ -27,14 +28,19 @@ export function Field({ label, hint, children, className, htmlFor }: FieldProps)
   );
 }
 
+/**
+ * `autoFocus` on the fields below works only with a mouse: on a touch screen focusing would pop up
+ * the keyboard before the user has even read the sheet (see `isTouchPrimary`).
+ */
 export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { suffix?: ReactNode }>(
-  function TextInput({ className, suffix, ...props }, ref) {
+  function TextInput({ className, suffix, autoFocus, ...props }, ref) {
+    const focus = autoFocus && !isTouchPrimary();
     if (suffix == null) {
-      return <input ref={ref} className={cn(CONTROL, 'h-12', className)} {...props} />;
+      return <input ref={ref} className={cn(CONTROL, 'h-12', className)} autoFocus={focus} {...props} />;
     }
     return (
       <div className="relative">
-        <input ref={ref} className={cn(CONTROL, 'h-12 pr-14', className)} {...props} />
+        <input ref={ref} className={cn(CONTROL, 'h-12 pr-14', className)} autoFocus={focus} {...props} />
         <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-[length:var(--hi-text-body)] text-[var(--hi-text-3)]">
           {suffix}
         </span>
@@ -44,8 +50,15 @@ export const TextInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLIn
 );
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
-  function TextArea({ className, ...props }, ref) {
-    return <textarea ref={ref} className={cn(CONTROL, 'py-3 min-h-[120px] resize-y', className)} {...props} />;
+  function TextArea({ className, autoFocus, ...props }, ref) {
+    return (
+      <textarea
+        ref={ref}
+        className={cn(CONTROL, 'py-3 min-h-[120px] resize-y', className)}
+        autoFocus={autoFocus && !isTouchPrimary()}
+        {...props}
+      />
+    );
   },
 );
 

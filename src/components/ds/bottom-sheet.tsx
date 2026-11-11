@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Dialog } from 'radix-ui';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isTouchPrimary } from '@/lib/input-device';
 import { useSwipeToDismiss } from './use-swipe-to-dismiss';
 
 interface BottomSheetProps {
@@ -20,6 +21,7 @@ interface BottomSheetProps {
  * Mobile bottom sheet built on the Radix dialog primitive:
  * focus trap, escape-to-close, scroll lock, safe-area padding,
  * and swipe down to close (the grabber at the top promises it).
+ * On touch screens nothing inside is focused on open, so the keyboard waits for a tap on a field.
  */
 export function BottomSheet({ open, onOpenChange, title, description, hideDescription, children, footer, className }: BottomSheetProps) {
   const { sheetRef, overlayRef } = useSwipeToDismiss(() => onOpenChange(false));
@@ -29,6 +31,13 @@ export function BottomSheet({ open, onOpenChange, title, description, hideDescri
         <Dialog.Overlay ref={overlayRef} className="hi-sheet-overlay fixed inset-0 z-50 bg-[var(--hi-overlay)] backdrop-blur-[2px]" />
         <Dialog.Content
           ref={sheetRef}
+          onOpenAutoFocus={(event) => {
+            // On a touch screen the sheet takes focus itself (no keyboard, no focus ring on ✕);
+            // fields skip autoFocus there too (`TextInput`). With a mouse Radix focuses as usual.
+            if (!isTouchPrimary()) return;
+            event.preventDefault();
+            (event.currentTarget as HTMLElement).focus({ preventScroll: true });
+          }}
           className={cn(
             'hi-sheet fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full max-w-[560px] flex-col overflow-x-hidden [overflow-wrap:anywhere]',
             'rounded-t-[28px] border-t border-[var(--hi-line-strong)] bg-[var(--hi-raised)] text-[var(--hi-text)]',

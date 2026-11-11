@@ -476,7 +476,7 @@ async function syncStockDividends(ra: ResolvedAsset): Promise<{
 async function syncFundDistributions(ra: ResolvedAsset): Promise<{
   fundRows: Awaited<ReturnType<typeof fetchFundDistributions>>;
 }> {
-  const fundKey = await findFundKey(ra.asset.ticker, ra.asset.isin);
+  const fundKey = await findFundKey(ra.asset.ticker, ra.asset.isin, ra.secid);
   const fundRows = fundKey ? await fetchFundDistributions(fundKey) : null;
 
   if (fundRows && fundRows.length > 0) {

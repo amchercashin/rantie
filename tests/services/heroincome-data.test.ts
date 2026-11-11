@@ -201,6 +201,29 @@ describe('heroincome-data', () => {
       expect(await findFundKey('plz5')).toBe('PLZ5');
     });
 
+    // Files are keyed by ISIN; a MOEX code that differs from it comes as an alias.
+    const ISIN_INDEX = {
+      updatedAt: '2026-11-11T17:00:00Z',
+      fundsCount: 2,
+      funds: ['RU000A108BZ2', 'RU000A10BBS6'],
+      aliases: { XTRIUMF: 'RU000A108BZ2' },
+    };
+
+    it('resolves a ticker through the aliases', async () => {
+      mockFetchResponses({ 'funds/index.json': ISIN_INDEX });
+      expect(await findFundKey('xtriumf')).toBe('RU000A108BZ2');
+    });
+
+    it('matches the MOEX code when ticker and ISIN miss', async () => {
+      mockFetchResponses({ 'funds/index.json': ISIN_INDEX });
+      expect(await findFundKey('МОЙ-ПАРУС', undefined, 'RU000A10BBS6')).toBe('RU000A10BBS6');
+    });
+
+    it('ignores an alias pointing to a fund not in the index', async () => {
+      mockFetchResponses({ 'funds/index.json': { ...ISIN_INDEX, aliases: { OLD: 'RU000A000000' } } });
+      expect(await findFundKey('OLD')).toBeNull();
+    });
+
     it('caches fund index separately from stock index', async () => {
       mockFetchResponses({
         'stocks/dohod/index.json': MOCK_INDEX,

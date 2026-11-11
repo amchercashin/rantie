@@ -55,7 +55,10 @@ interface FundDistributionData {
 interface FundIndex {
   updatedAt: string;
   fundsCount: number;
+  /** File keys — the fund's ISIN. */
   funds: string[];
+  /** MOEX code → key, for funds whose exchange code differs from the ISIN (XTRIUMF). */
+  aliases?: Record<string, string>;
 }
 
 // ---- Shared fetch ----
@@ -136,16 +139,16 @@ export async function fetchDohodDividends(ticker: string): Promise<DohodDividend
 
 // ---- Fund distributions ----
 
-export async function findFundKey(ticker?: string, isin?: string): Promise<string | null> {
+/** The fund's file key, by any of its codes (ticker, ISIN, MOEX secid), directly or through an alias. */
+export async function findFundKey(...codes: (string | undefined)[]): Promise<string | null> {
   const index = await fetchFundIndex();
   if (!index) return null;
-  if (ticker) {
-    const upper = ticker.toUpperCase();
+  for (const code of codes) {
+    if (!code) continue;
+    const upper = code.toUpperCase();
     if (index.funds.includes(upper)) return upper;
-  }
-  if (isin) {
-    const upper = isin.toUpperCase();
-    if (index.funds.includes(upper)) return upper;
+    const alias = index.aliases?.[upper];
+    if (alias && index.funds.includes(alias)) return alias;
   }
   return null;
 }

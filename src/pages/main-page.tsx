@@ -28,16 +28,13 @@ import { upcomingPayments } from '@/services/income-projection';
 import { loadDemoPortfolio, removeDemoPortfolio } from '@/services/demo-portfolio';
 import { withViewTransition } from '@/lib/view-transition';
 import { scrollToWithPeek } from '@/lib/smooth-scroll';
+import { readStorage, writeStorage } from '@/lib/safe-storage';
 
 const PERIOD_KEY = 'rt-income-period';
 let hasVisitedMainPage = false;
 
 function readPeriod(): IncomePeriod {
-  try {
-    return localStorage.getItem(PERIOD_KEY) === 'year' ? 'year' : 'month';
-  } catch {
-    return 'month';
-  }
+  return readStorage(PERIOD_KEY) === 'year' ? 'year' : 'month';
 }
 
 export function MainPage() {
@@ -72,7 +69,7 @@ export function MainPage() {
 
   const changeMode = (next: IncomePeriod) => {
     setMode(next);
-    try { localStorage.setItem(PERIOD_KEY, next); } catch { /* ignore */ }
+    writeStorage(PERIOD_KEY, next);
   };
 
   const assetsById = useMemo(() => new Map(assets.map((a) => [a.id!, a])), [assets]);

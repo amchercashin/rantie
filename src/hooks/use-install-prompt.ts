@@ -1,8 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { readStorage, writeStorage } from '@/lib/safe-storage';
 
+// The `hi-` prefix is historical (the app was called HeroIncome). Renaming the keys would
+// forget who has already dismissed the banner, so they stay.
 const KEY_DISMISSED  = 'hi-a2hs-dismissed';
 const KEY_VISITS     = 'hi-a2hs-visits';
 const KEY_IOS_SEEN   = 'hi-a2hs-ios-seen';
+/**
+ * Written by the onboarding that the welcome flow replaced; nothing writes it any more
+ * (the welcome flow keeps `rt-welcome-done`, see lib/hints.ts). So the install banner and the
+ * iOS guide show only to people who finished the old onboarding. Whether to bring them back
+ * for everyone is an open product decision — switching to `isWelcomeDone()` does it.
+ */
 const ONBOARDING_KEY = 'hi-onboarding-done';
 
 const VISITS_TO_RE_SHOW = 5;
@@ -70,14 +79,14 @@ export function useInstallPrompt(): InstallPromptState {
   useEffect(() => {
     if (standalone) return;
 
-    const onboardingDone = localStorage.getItem(ONBOARDING_KEY) === '1';
-    const iosSeen = localStorage.getItem(KEY_IOS_SEEN) === '1';
-    const dismissedAt = localStorage.getItem(KEY_DISMISSED);
+    const onboardingDone = readStorage(ONBOARDING_KEY) === '1';
+    const iosSeen = readStorage(KEY_IOS_SEEN) === '1';
+    const dismissedAt = readStorage(KEY_DISMISSED);
     const dismissTs = dismissedAt ? Number(dismissedAt) : null;
 
-    const prevVisits = Number(localStorage.getItem(KEY_VISITS) || '0');
+    const prevVisits = Number(readStorage(KEY_VISITS) || '0');
     const visits = prevVisits + 1;
-    localStorage.setItem(KEY_VISITS, String(visits));
+    writeStorage(KEY_VISITS, String(visits));
 
     const visitsSinceDismiss = dismissTs ? visits : 0;
 
@@ -113,13 +122,13 @@ export function useInstallPrompt(): InstallPromptState {
   }, []);
 
   const dismiss = useCallback(() => {
-    localStorage.setItem(KEY_DISMISSED, String(Date.now()));
-    localStorage.setItem(KEY_VISITS, '0');
+    writeStorage(KEY_DISMISSED, String(Date.now()));
+    writeStorage(KEY_VISITS, '0');
     setShowButton(false);
   }, []);
 
   const markIosSeen = useCallback(() => {
-    localStorage.setItem(KEY_IOS_SEEN, '1');
+    writeStorage(KEY_IOS_SEEN, '1');
     setAutoLaunch(false);
   }, []);
 

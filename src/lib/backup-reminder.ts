@@ -4,6 +4,7 @@
  * localStorage may be unavailable (private mode) — every access is guarded.
  */
 import { plural } from '@/lib/utils';
+import { readStorage, writeStorage } from '@/lib/safe-storage';
 
 const LAST_BACKUP_KEY = 'rt-last-backup';
 const SNOOZE_KEY = 'rt-backup-snooze';
@@ -17,22 +18,15 @@ export const REPEAT_REMINDER_DAYS = 30;
 export const SNOOZE_DAYS = 14;
 
 function readDate(key: string): Date | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const d = new Date(raw);
-    return isNaN(d.getTime()) ? null : d;
-  } catch {
-    return null;
-  }
+  const raw = readStorage(key);
+  if (!raw) return null;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
 }
 
+/** When storage is unavailable the date is not kept and the reminder simply shows again. */
 function writeDate(key: string, date: Date): void {
-  try {
-    localStorage.setItem(key, date.toISOString());
-  } catch {
-    /* storage unavailable — the reminder simply shows again */
-  }
+  writeStorage(key, date.toISOString());
 }
 
 export function getLastBackupAt(): Date | null {

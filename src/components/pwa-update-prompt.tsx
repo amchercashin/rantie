@@ -6,7 +6,18 @@ export function PwaUpdatePrompt() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
-  } = useRegisterSW();
+  } = useRegisterSW({
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+      // The browser looks for a new version only when the page is loaded. An installed app is
+      // rarely loaded anew — it comes back from the background for days — so look on every return.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && navigator.onLine) {
+          registration.update().catch(() => { /* offline or the server is unreachable — next time */ });
+        }
+      });
+    },
+  });
 
   if (!needRefresh) return null;
 

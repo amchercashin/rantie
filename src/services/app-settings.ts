@@ -3,7 +3,7 @@ import { db } from '@/db/database';
 const NDFL_PREFIX = 'ndfl-';
 
 export async function updateAppSetting(key: string, value: string): Promise<void> {
-  await db.table('settings').put({ key, value });
+  await db.settings.put({ key, value });
 }
 
 export async function clearAllData(): Promise<void> {
@@ -26,7 +26,7 @@ export async function getNdflRates(): Promise<Map<string, number>> {
   // Plain reads only: Safari can fail an index cursor (`orderBy('type').uniqueKeys()`) with
   // "UnknownError: Unable to open cursor" after assets are deleted, and the app then never starts.
   const [rows, assets] = await Promise.all([
-    db.table('settings').toArray() as Promise<{ key: string; value: string }[]>,
+    db.settings.toArray(),
     db.assets.toArray(),
   ]);
   const types = new Set(assets.map((a) => a.type));
@@ -45,5 +45,5 @@ export async function getNdflRates(): Promise<Map<string, number>> {
 }
 
 export async function updateNdflRate(category: string, rate: number): Promise<void> {
-  await db.table('settings').put({ key: `${NDFL_PREFIX}${category}`, value: String(rate) });
+  await db.settings.put({ key: `${NDFL_PREFIX}${category}`, value: String(rate) });
 }

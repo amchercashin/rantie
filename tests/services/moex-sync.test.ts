@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
-import Dexie from 'dexie';
+import Dexie, { liveQuery } from 'dexie';
 import { db } from '@/db/database';
 
 vi.mock('@/services/heroincome-data', () => ({
@@ -42,7 +42,8 @@ import {
   isDohodAvailable, fetchDohodDividends, findFundKey, fetchFundDistributions,
   isDohodIndexLoaded, isFundIndexLoaded,
 } from '@/services/heroincome-data';
-import { syncAllAssets, syncAssetPayments, getLastSyncAt, getLastPriceSyncAt } from '@/services/moex-sync';
+import { syncAllAssets, syncAssetPayments } from '@/services/moex-sync';
+import { getLastSyncAt, getLastPriceSyncAt } from '@/services/sync-state';
 
 const ASSET_DEFAULTS = {
   paymentPerUnitSource: 'fact' as const,
@@ -814,6 +815,35 @@ describe('syncAllAssets', () => {
     expect(records).toHaveLength(1);
     expect(records[0].dataSource).toBe('parus');
     expect(records[0].amount).toBe(72.45);
+  });
+
+  it('writes the prices of all securities at once, so the screens recalculate once', async () => {
+    for (const ticker of ['SBER', 'LKOH', 'MTSS']) {
+      await db.assets.add({
+        type: 'Акции', name: ticker, ticker, moexSecid: ticker, moexBoardId: 'TQBR', moexMarket: 'shares',
+        dataSource: 'moex', createdAt: new Date(), updatedAt: new Date(), ...ASSET_DEFAULTS,
+      });
+    }
+    (fetchBatchStockPrices as Mock).mockResolvedValue(new Map([
+      ['SBER', { currentPrice: 300, prevPrice: 299 }],
+      ['LKOH', { currentPrice: 7000, prevPrice: 6900 }],
+      ['MTSS', { currentPrice: null, prevPrice: 228 }],
+    ]));
+
+    // What a screen sees: every emission of the live query is one recalculation of the portfolio.
+    const seen: (number | undefined)[][] = [];
+    const subscription = liveQuery(() => db.assets.toArray()).subscribe((assets) => {
+      seen.push(assets.map((a) => a.currentPrice));
+    });
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+
+    const result = await syncAllAssets({ pricesOnly: true });
+    await vi.waitFor(() => expect(seen[seen.length - 1]).toEqual([300, 7000, 228]));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    subscription.unsubscribe();
+
+    expect(result.synced).toBe(3);
+    expect(seen).toEqual([[undefined, undefined, undefined], [300, 7000, 228]]);
   });
 
   describe('one payment source per security', () => {

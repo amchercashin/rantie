@@ -1,5 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import { syncAllAssets, syncSingleAsset, getLastSyncAt, getLastPriceSyncAt, type SyncResult } from '@/services/moex-sync';
+import type { SyncResult } from '@/services/moex-sync';
+import { getLastSyncAt, getLastPriceSyncAt } from '@/services/sync-state';
+
+/**
+ * The sync itself (MOEX, dohod.ru, rates) is loaded when it is first needed, not with the app:
+ * most starts find fresh prices and never run it.
+ */
+const loadSync = () => import('@/services/moex-sync');
 
 interface SyncContextValue {
   syncing: boolean;
@@ -27,6 +34,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setError(null);
     setWarning(null);
     try {
+      const { syncAllAssets } = await loadSync();
       const result = await syncAllAssets();
       if (result.synced > 0) {
         setLastSyncAt(new Date());
@@ -50,7 +58,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const syncAsset = useCallback(async (assetId: number): Promise<void> => {
     // Skip if full sync is running — it will cover this asset
     if (syncingRef.current) return;
-    await syncSingleAsset(assetId);
+    try {
+      const { syncSingleAsset } = await loadSync();
+      await syncSingleAsset(assetId);
+    } catch {
+      /* callers fire and forget: the asset is refreshed by the next full sync */
+    }
   }, []);
 
   const triggerPriceSyncIfStale = useCallback(async (): Promise<void> => {
@@ -66,6 +79,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setSyncing(true);
     setError(null);
     try {
+      const { syncAllAssets } = await loadSync();
       const result = await syncAllAssets({ pricesOnly: true });
       if (result.synced > 0) setLastSyncAt(new Date());
     } catch (e) {

@@ -24,7 +24,7 @@ export async function exportAllData(): Promise<string> {
     holdings: await db.holdings.toArray(),
     paymentHistory: await db.paymentHistory.toArray(),
     importRecords: await db.importRecords.toArray(),
-    settings: await db.table('settings').toArray(),
+    settings: await db.settings.toArray(),
     exchangeRates: await db.exchangeRates.toArray(),
   };
   return JSON.stringify(data, null, 2);
@@ -32,24 +32,23 @@ export async function exportAllData(): Promise<string> {
 
 export async function importAllData(json: string): Promise<void> {
   const data = parseBackup(json);
-  const settingsTable = db.table('settings');
 
-  await db.transaction('rw', [db.accounts, db.assets, db.holdings, db.paymentHistory, db.importRecords, db.exchangeRates, settingsTable], async () => {
+  await db.transaction('rw', [db.accounts, db.assets, db.holdings, db.paymentHistory, db.importRecords, db.exchangeRates, db.settings], async () => {
     await db.accounts.clear();
     await db.assets.clear();
     await db.holdings.clear();
     await db.paymentHistory.clear();
     await db.importRecords.clear();
     await db.exchangeRates.clear();
-    await settingsTable.clear();
+    await db.settings.clear();
 
     if (data.accounts.length) await db.accounts.bulkAdd(data.accounts);
     if (data.assets.length) await db.assets.bulkAdd(data.assets);
     if (data.holdings.length) await db.holdings.bulkAdd(data.holdings);
     if (data.paymentHistory.length) await db.paymentHistory.bulkAdd(data.paymentHistory);
     if (data.importRecords.length) await db.importRecords.bulkAdd(data.importRecords);
-    if (data.exchangeRates.length) await db.exchangeRates.bulkAdd(data.exchangeRates);
-    for (const setting of data.settings) await settingsTable.put(setting);
+    if (data.exchangeRates.length) await db.exchangeRates.bulkPut(data.exchangeRates);
+    if (data.settings.length) await db.settings.bulkPut(data.settings);
   });
 }
 

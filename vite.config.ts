@@ -56,6 +56,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // The libraries change far less often than the app. In chunks of their own they keep
+        // their file names from deploy to deploy, so an update downloads only the app's code
+        // again (the service worker keeps every file whose name did not change).
+        manualChunks(id) {
+          if (/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom)\//.test(id)) return 'react';
+          if (/node_modules\/(dexie|dexie-react-hooks)\//.test(id)) return 'dexie';
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'happy-dom',

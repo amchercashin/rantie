@@ -14,7 +14,7 @@ interface DemoAsset {
   asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>;
   quantity: number;
   averagePrice?: number;
-  /** [months ago, amount per unit]; negative months = announced forecast */
+  /** [months ago, amount per unit]; negative months = forecast (`isForecast`) */
   payments?: [number, number][];
   paymentType?: PaymentHistory['type'];
   /** Where the payment history comes from (as after a real sync). */

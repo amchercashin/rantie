@@ -90,16 +90,25 @@ describe('income-calculator', () => {
     });
 
     it('includes many payments within window regardless of count', () => {
+      // Two payments a month, Jul 2025 .. Jun 2026 — all 24 inside the window of 2026-06-15.
+      const payments = Array.from({ length: 24 }, (_, i) => ({
+        amount: 50,
+        date: new Date(2025, 6 + Math.floor(i / 2), i % 2 === 0 ? 1 : 10),
+      }));
+      const result = calcAnnualIncomePerUnit(payments, new Date('2026-06-15'));
+      expect(result.usedPayments).toHaveLength(24);
+      expect(result.annualIncome).toBe(1200);
+    });
+
+    it('leaves out records dated after now: they are expected, not received', () => {
       const payments = Array.from({ length: 14 }, (_, i) => ({
         amount: 100,
         date: new Date(2025, 6 + i, 1), // Jul 2025 .. Aug 2026
       }));
-      // now = 2026-06-15; window starts 2025-06-15
-      // Jul 2025 (i=0) through Aug 2026 (i=13): all 14 dates >= 2025-06-15
-      // So all 14 payments are within window
+      // now = 2026-06-15: Jul 2025 .. Jun 2026 count, Jul and Aug 2026 are still ahead.
       const result = calcAnnualIncomePerUnit(payments, new Date('2026-06-15'));
-      expect(result.usedPayments).toHaveLength(14);
-      expect(result.annualIncome).toBe(1400);
+      expect(result.usedPayments).toHaveLength(12);
+      expect(result.annualIncome).toBe(1200);
     });
 
     it('includes payment on the same date as now', () => {

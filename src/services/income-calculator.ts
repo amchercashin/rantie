@@ -45,6 +45,11 @@ export interface AnnualIncomeResult {
   usedPayments: PaymentRecord[];
 }
 
+/**
+ * "12 pockets": the sum of payments over the trailing 12 months. A record dated after `now`
+ * (an announced dividend from MOEX, a payment typed in ahead of time) is expected income — it
+ * shows up among the upcoming payments and starts to count on its date.
+ */
 export function calcAnnualIncomePerUnit(
   history: PaymentRecord[],
   now: Date = new Date(),
@@ -56,7 +61,7 @@ export function calcAnnualIncomePerUnit(
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
   const usedPayments = history
-    .filter(p => p.date >= twelveMonthsAgo)
+    .filter(p => p.date >= twelveMonthsAgo && p.date <= now)
     .sort((a, b) => b.date.getTime() - a.date.getTime());
 
   if (usedPayments.length === 0) return empty;

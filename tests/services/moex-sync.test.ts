@@ -9,10 +9,8 @@ vi.mock('@/services/heroincome-data', () => ({
   resetDohodCache: vi.fn(),
   findFundKey: vi.fn().mockResolvedValue(null),
   fetchFundDistributions: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock('@/services/payment-reconciler', () => ({
-  reconcilePayments: vi.fn(),
+  isDohodIndexLoaded: vi.fn().mockResolvedValue(true),
+  isFundIndexLoaded: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('@/services/moex-api', () => ({
@@ -40,8 +38,11 @@ import {
   fetchBatchBondData,
   fetchIndicativeRates,
 } from '@/services/moex-api';
-import { isDohodAvailable, fetchDohodDividends, findFundKey, fetchFundDistributions } from '@/services/heroincome-data';
-import { syncAllAssets, getLastSyncAt, getLastPriceSyncAt } from '@/services/moex-sync';
+import {
+  isDohodAvailable, fetchDohodDividends, findFundKey, fetchFundDistributions,
+  isDohodIndexLoaded, isFundIndexLoaded,
+} from '@/services/heroincome-data';
+import { syncAllAssets, syncAssetPayments, getLastSyncAt, getLastPriceSyncAt } from '@/services/moex-sync';
 
 const ASSET_DEFAULTS = {
   paymentPerUnitSource: 'fact' as const,
@@ -813,6 +814,140 @@ describe('syncAllAssets', () => {
     expect(records).toHaveLength(1);
     expect(records[0].dataSource).toBe('parus');
     expect(records[0].amount).toBe(72.45);
+  });
+
+  describe('one payment source per security', () => {
+    const LKOH = {
+      type: 'Акции', name: 'LKOH', ticker: 'LKOH', moexSecid: 'LKOH',
+      moexBoardId: 'TQBR', moexMarket: 'shares' as const,
+      dataSource: 'moex' as const, createdAt: new Date(), updatedAt: new Date(),
+      ...ASSET_DEFAULTS, frequencySource: 'moex' as const,
+    };
+    const PLZ5 = {
+      type: 'Фонды', name: 'PLZ5', ticker: 'PLZ5', isin: 'RU000A1022Z1',
+      moexSecid: 'PLZ5', moexBoardId: 'TQPI', moexMarket: 'shares' as const,
+      dataSource: 'import' as const, createdAt: new Date(), updatedAt: new Date(),
+      ...ASSET_DEFAULTS, frequencyPerYear: 12, frequencySource: 'moex' as const,
+    };
+    const moexDividends = {
+      summary: { lastPaymentAmount: 397, lastPaymentDate: new Date('2026-01-12'), frequencyPerYear: 2, nextExpectedCutoffDate: null },
+      history: [
+        { date: new Date('2025-06-03'), amount: 541 },
+        { date: new Date('2026-01-12'), amount: 397 },
+      ],
+    };
+
+    beforeEach(() => {
+      (fetchBatchStockPrices as Mock).mockResolvedValue(new Map());
+      (fetchDividends as Mock).mockResolvedValue(moexDividends);
+      (isDohodAvailable as Mock).mockResolvedValue(false);
+      (fetchDohodDividends as Mock).mockResolvedValue(null);
+      (isDohodIndexLoaded as Mock).mockResolvedValue(true);
+      (findFundKey as Mock).mockResolvedValue(null);
+      (fetchFundDistributions as Mock).mockResolvedValue(null);
+      (isFundIndexLoaded as Mock).mockResolvedValue(true);
+    });
+
+    it('keeps dohod dividends and adds no MOEX rows when the dohod index is unreachable', async () => {
+      const assetId = (await db.assets.add(LKOH)) as number;
+      await db.paymentHistory.bulkAdd([
+        { assetId, amount: 541, date: new Date('2025-06-03'), type: 'dividend', dataSource: 'dohod' },
+        { assetId, amount: 397, date: new Date('2026-01-12'), type: 'dividend', dataSource: 'dohod' },
+      ]);
+      (isDohodIndexLoaded as Mock).mockResolvedValue(false);
+
+      await syncAllAssets();
+
+      const records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+      expect(records.map((r) => r.dataSource)).toEqual(['dohod', 'dohod']);
+      expect(fetchDividends).not.toHaveBeenCalled();
+    });
+
+    it('keeps dohod dividends when the ticker file fails to load', async () => {
+      const assetId = (await db.assets.add(LKOH)) as number;
+      await db.paymentHistory.add({ assetId, amount: 397, date: new Date('2026-01-12'), type: 'dividend', dataSource: 'dohod' });
+      (isDohodAvailable as Mock).mockResolvedValue(true);
+      (fetchDohodDividends as Mock).mockResolvedValue(null);
+
+      await syncAllAssets();
+
+      const records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+      expect(records).toHaveLength(1);
+      expect(records[0].dataSource).toBe('dohod');
+    });
+
+    it('replaces dohod rows with MOEX ones once dohod no longer lists the ticker', async () => {
+      const assetId = (await db.assets.add(LKOH)) as number;
+      await db.paymentHistory.add({ assetId, amount: 397, date: new Date('2026-01-12'), type: 'dividend', dataSource: 'dohod' });
+
+      await syncAllAssets();
+
+      const records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+      expect(records).toHaveLength(2);
+      expect(records.every((r) => r.dataSource === 'moex')).toBe(true);
+    });
+
+    it('keeps dohod rows when dohod dropped the ticker but MOEX has nothing either', async () => {
+      const assetId = (await db.assets.add(LKOH)) as number;
+      await db.paymentHistory.add({ assetId, amount: 397, date: new Date('2026-01-12'), type: 'dividend', dataSource: 'dohod' });
+      (fetchDividends as Mock).mockResolvedValue(null);
+
+      await syncAllAssets();
+
+      const records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+      expect(records).toHaveLength(1);
+      expect(records[0].dataSource).toBe('dohod');
+    });
+
+    it('uses MOEX for a new stock while dohod is unreachable, then switches to dohod', async () => {
+      const assetId = (await db.assets.add(LKOH)) as number;
+      (isDohodIndexLoaded as Mock).mockResolvedValue(false);
+
+      await syncAllAssets();
+      let records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+      expect(records.map((r) => r.dataSource)).toEqual(['moex', 'moex']);
+
+      (isDohodIndexLoaded as Mock).mockResolvedValue(true);
+      (isDohodAvailable as Mock).mockResolvedValue(true);
+      (fetchDohodDividends as Mock).mockResolvedValue([
+        { date: new Date('2025-06-03'), amount: 541, isForecast: false },
+        { date: new Date('2026-01-12'), amount: 397, isForecast: false },
+      ]);
+
+      await syncAllAssets();
+      records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+      expect(records.map((r) => r.dataSource)).toEqual(['dohod', 'dohod']);
+    });
+
+    it('keeps Parus distributions and adds no MOEX rows when the fund index is unreachable', async () => {
+      const assetId = (await db.assets.add(PLZ5)) as number;
+      await db.paymentHistory.add({ assetId, amount: 72.45, date: new Date('2026-02-27'), type: 'distribution', dataSource: 'parus' });
+      (isFundIndexLoaded as Mock).mockResolvedValue(false);
+      (fetchDividends as Mock).mockResolvedValue({
+        summary: { lastPaymentAmount: 72.45, lastPaymentDate: new Date('2026-02-27'), frequencyPerYear: 12, nextExpectedCutoffDate: null },
+        history: [{ date: new Date('2026-02-27'), amount: 72.45 }],
+      });
+
+      await syncAllAssets();
+
+      const records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+      expect(records).toHaveLength(1);
+      expect(records[0].dataSource).toBe('parus');
+      expect(fetchDividends).not.toHaveBeenCalled();
+    });
+
+    it('per-asset payment sync follows the same rule', async () => {
+      const assetId = (await db.assets.add(LKOH)) as number;
+      await db.paymentHistory.add({ assetId, amount: 397, date: new Date('2026-01-12'), type: 'dividend', dataSource: 'dohod' });
+      (isDohodIndexLoaded as Mock).mockResolvedValue(false);
+
+      const result = await syncAssetPayments(assetId);
+
+      expect(result.success).toBe(true);
+      const records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+      expect(records).toHaveLength(1);
+      expect(records[0].dataSource).toBe('dohod');
+    });
   });
 
   it('handles mixed stock+bond portfolio', async () => {

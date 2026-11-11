@@ -176,6 +176,20 @@ describe('incomeTimeline', () => {
     expect(last.value).toBe(36);
   });
 
+  it('agrees with the snapshot today when a record is dated in the future', () => {
+    // MOEX already lists the next dividend: it is an upcoming payment, not income received.
+    const { snapshot, projection, timeline } = run(
+      [stock({ id: 1 })],
+      [holding(1, 10)],
+      [payment(1, '2026-07-18', 36), payment(1, '2026-12-20', 12)],
+    );
+
+    const today = timeline.find((p) => p.date === NOW)!;
+    expect(snapshot.portfolio.totalIncomePerMonth).toBeCloseTo((36 * 10) / 12);
+    expect(today.value).toBeCloseTo(snapshot.portfolio.totalIncomePerMonth);
+    expect(projection.find((p) => p.basis === 'scheduled')).toMatchObject({ perUnit: 12 });
+  });
+
   it('keeps manual income flat', () => {
     const { timeline } = run(
       [rent({ id: 1, paymentPerUnit: 120000, paymentPerUnitSource: 'manual' })],

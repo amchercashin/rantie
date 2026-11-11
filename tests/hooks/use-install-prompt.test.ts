@@ -1,13 +1,14 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 
 import {
   getPlatform,
   getIsStandalone,
-  shouldShowButton,
-  shouldAutoLaunchGuide,
+  shouldOfferInstall,
   useInstallPrompt,
 } from '@/hooks/use-install-prompt';
+import { listenForInstallPrompt } from '@/lib/install-prompt';
+import { markWelcomeDone } from '@/lib/hints';
 
 describe('getPlatform', () => {
   const originalUA = navigator.userAgent;
@@ -55,139 +56,121 @@ describe('getIsStandalone', () => {
   });
 });
 
-describe('shouldShowButton', () => {
-  it('shows when onboarding done, mobile, not standalone, not dismissed', () => {
-    expect(shouldShowButton({
-      onboardingDone: true,
-      isStandalone: false,
-      platform: 'ios',
-      dismissedAt: null,
-      visitsSinceDismiss: 0,
-    })).toBe(true);
+describe('shouldOfferInstall', () => {
+  const base = { onboardingDone: true, isStandalone: false, platform: 'ios' as const, dismissedAt: null, visitsSinceDismiss: 0 };
+
+  it('offers on a phone, in a browser tab, after the onboarding', () => {
+    expect(shouldOfferInstall(base)).toBe(true);
+    expect(shouldOfferInstall({ ...base, platform: 'android' })).toBe(true);
   });
 
-  it('hides when standalone', () => {
-    expect(shouldShowButton({
-      onboardingDone: true,
-      isStandalone: true,
-      platform: 'android',
-      dismissedAt: null,
-      visitsSinceDismiss: 0,
-    })).toBe(false);
+  it('does not offer to an installed app', () => {
+    expect(shouldOfferInstall({ ...base, isStandalone: true })).toBe(false);
   });
 
-  it('hides on desktop', () => {
-    expect(shouldShowButton({
-      onboardingDone: true,
-      isStandalone: false,
-      platform: 'desktop',
-      dismissedAt: null,
-      visitsSinceDismiss: 0,
-    })).toBe(false);
+  it('does not offer on desktop', () => {
+    expect(shouldOfferInstall({ ...base, platform: 'desktop' })).toBe(false);
   });
 
-  it('hides when onboarding not done', () => {
-    expect(shouldShowButton({
-      onboardingDone: false,
-      isStandalone: false,
-      platform: 'ios',
-      dismissedAt: null,
-      visitsSinceDismiss: 0,
-    })).toBe(false);
+  it('waits for the onboarding to finish', () => {
+    expect(shouldOfferInstall({ ...base, onboardingDone: false })).toBe(false);
   });
 
-  it('hides when recently dismissed', () => {
-    expect(shouldShowButton({
-      onboardingDone: true,
-      isStandalone: false,
-      platform: 'ios',
-      dismissedAt: Date.now(),
-      visitsSinceDismiss: 3,
-    })).toBe(false);
-  });
-
-  it('shows again after 5 visits since dismiss', () => {
-    expect(shouldShowButton({
-      onboardingDone: true,
-      isStandalone: false,
-      platform: 'ios',
-      dismissedAt: Date.now() - 100000,
-      visitsSinceDismiss: 5,
-    })).toBe(true);
-  });
-});
-
-describe('shouldAutoLaunchGuide', () => {
-  it('auto-launches on iOS at 3rd visit when not seen', () => {
-    expect(shouldAutoLaunchGuide({
-      platform: 'ios',
-      visits: 3,
-      isStandalone: false,
-      iosSeen: false,
-    })).toBe(true);
-  });
-
-  it('does not auto-launch on Android', () => {
-    expect(shouldAutoLaunchGuide({
-      platform: 'android',
-      visits: 3,
-      isStandalone: false,
-      iosSeen: false,
-    })).toBe(false);
-  });
-
-  it('does not auto-launch when already seen', () => {
-    expect(shouldAutoLaunchGuide({
-      platform: 'ios',
-      visits: 5,
-      isStandalone: false,
-      iosSeen: true,
-    })).toBe(false);
-  });
-
-  it('does not auto-launch before 3rd visit', () => {
-    expect(shouldAutoLaunchGuide({
-      platform: 'ios',
-      visits: 2,
-      isStandalone: false,
-      iosSeen: false,
-    })).toBe(false);
+  it('stays quiet for five visits after a dismissal, then offers again', () => {
+    expect(shouldOfferInstall({ ...base, dismissedAt: Date.now(), visitsSinceDismiss: 2 })).toBe(false);
+    expect(shouldOfferInstall({ ...base, dismissedAt: Date.now(), visitsSinceDismiss: 5 })).toBe(true);
   });
 });
 
 describe('useInstallPrompt', () => {
   const originalUA = navigator.userAgent;
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1';
+  const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36';
+  const setUA = (value: string) => Object.defineProperty(navigator, 'userAgent', { value, configurable: true });
+
+  /** What Chrome on Android sends when the app can be installed. */
+  function browserOffersInstall(outcome: 'accepted' | 'dismissed' = 'accepted') {
+    const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: vi.fn().mockResolvedValue(undefined),
+      userChoice: Promise.resolve({ outcome }),
+    });
+    act(() => { window.dispatchEvent(event); });
+    return event;
+  }
+
+  beforeAll(() => listenForInstallPrompt());
 
   beforeEach(() => {
     localStorage.clear();
-    Object.defineProperty(navigator, 'userAgent', {
-      value: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36',
-      configurable: true,
-    });
+    act(() => { window.dispatchEvent(new Event('appinstalled')); }); // forget an offer left by another test
   });
 
-  afterEach(() => {
-    Object.defineProperty(navigator, 'userAgent', { value: originalUA, configurable: true });
-  });
+  afterEach(() => setUA(originalUA));
 
-  it('stays hidden until the onboarding is finished', () => {
+  it('stays hidden until the welcome flow is finished', () => {
+    setUA(IPHONE);
     const { result } = renderHook(() => useInstallPrompt());
-    expect(result.current.showButton).toBe(false);
+    expect(result.current.show).toBe(false);
   });
 
-  it('offers the install after the onboarding', () => {
+  it('invites an iPhone user once the welcome flow is finished', () => {
+    setUA(IPHONE);
+    markWelcomeDone();
+    const { result } = renderHook(() => useInstallPrompt());
+    expect(result.current.show).toBe(true);
+  });
+
+  it('honours the key left by the previous onboarding', () => {
+    setUA(IPHONE);
     localStorage.setItem('hi-onboarding-done', '1');
     const { result } = renderHook(() => useInstallPrompt());
-    expect(result.current.showButton).toBe(true);
+    expect(result.current.show).toBe(true);
+  });
+
+  it('on Android waits until the browser can show its install dialog', () => {
+    setUA(ANDROID);
+    markWelcomeDone();
+    const { result } = renderHook(() => useInstallPrompt());
+    expect(result.current.show).toBe(false);
+
+    browserOffersInstall();
+    expect(result.current.show).toBe(true);
+  });
+
+  it('opens the browser dialog and hides the invitation after the install', async () => {
+    setUA(ANDROID);
+    markWelcomeDone();
+    const event = browserOffersInstall('accepted');
+    const { result } = renderHook(() => useInstallPrompt());
+    expect(result.current.show).toBe(true);
+
+    await act(() => result.current.install());
+
+    expect(event.prompt).toHaveBeenCalledOnce();
+    expect(result.current.show).toBe(false);
+  });
+
+  it('treats "not now" in the browser dialog as a dismissal', async () => {
+    setUA(ANDROID);
+    markWelcomeDone();
+    browserOffersInstall('dismissed');
+    const { result } = renderHook(() => useInstallPrompt());
+
+    await act(() => result.current.install());
+    browserOffersInstall(); // the browser may offer again right away — the user has just said no
+
+    expect(result.current.show).toBe(false);
+    expect(localStorage.getItem('hi-a2hs-dismissed')).not.toBeNull();
   });
 
   it('stays hidden after a dismissal', () => {
-    localStorage.setItem('hi-onboarding-done', '1');
+    setUA(IPHONE);
+    markWelcomeDone();
     const first = renderHook(() => useInstallPrompt());
     act(() => first.result.current.dismiss());
-    expect(first.result.current.showButton).toBe(false);
+    expect(first.result.current.show).toBe(false);
 
     const next = renderHook(() => useInstallPrompt());
-    expect(next.result.current.showButton).toBe(false);
+    expect(next.result.current.show).toBe(false);
   });
 });

@@ -23,6 +23,7 @@ import {
   fetchFundDistributions,
 } from '@/services/heroincome-data';
 import { refreshExchangeRates } from '@/services/exchange-rates';
+import { markSynced } from '@/services/sync-state';
 
 // ============ Concurrency Helper ============
 
@@ -59,9 +60,6 @@ export interface SyncResult {
   /** Currencies whose MOEX rate was refreshed. */
   ratesUpdated: string[];
 }
-
-const LAST_FULL_SYNC_KEY = 'lastSyncAt';
-const LAST_PRICE_SYNC_KEY = 'lastPriceSyncAt';
 
 interface ResolvedAsset {
   asset: Asset;
@@ -123,41 +121,63 @@ export async function syncAllAssets(options?: { pricesOnly?: boolean }): Promise
     }),
   );
 
-  // Phase 3: Enrich — write prices + fetch dividends/coupons with concurrency=3
-  const pricesOnly = options?.pricesOnly ?? false;
-  const enrichTasks = resolved.map((ra) => () => enrichAsset(ra, priceMap.get(ra.secid), { pricesOnly }));
-  const enrichResults = await runWithConcurrency(enrichTasks, 3);
+  // Bonds the batch did not return are asked one by one.
+  const missingBonds = resolved.filter((ra) => ra.market === 'bonds' && !priceMap.has(ra.secid));
+  await runWithConcurrency(
+    missingBonds.map((ra) => async () => {
+      const data = await fetchBondData(ra.secid, ra.boardId);
+      if (data) priceMap.set(ra.secid, data);
+    }),
+    3,
+  );
 
-  for (let i = 0; i < enrichResults.length; i++) {
-    const r = enrichResults[i];
-    if (r.status === 'fulfilled') {
-      result.synced++;
-      result.warnings.push(...r.value);
-    } else {
-      result.failed++;
-      const ticker = resolved[i].asset.ticker ?? resolved[i].secid;
-      const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
-      result.errors.push(`${ticker}: ${reason}`);
+  const fail = (ra: ResolvedAsset, reason: unknown) => {
+    result.failed++;
+    const ticker = ra.asset.ticker ?? ra.secid;
+    result.errors.push(`${ticker}: ${reason instanceof Error ? reason.message : String(reason)}`);
+  };
+
+  // Phase 3: Prices — written for all securities in one transaction. Every write to `assets`
+  // makes the open screens recalculate the whole portfolio; one write means one recalculation
+  // instead of one per security.
+  const now = new Date();
+  const priced: ResolvedAsset[] = [];
+  const patches: { key: number; changes: Partial<Asset> }[] = [];
+  for (const ra of resolved) {
+    const data = priceMap.get(ra.secid);
+    if (ra.market === 'bonds' && !data) {
+      fail(ra, NO_BOND_DATA);
+      continue;
+    }
+    const changes = pricePatch(ra, data, now);
+    if (changes) patches.push({ key: ra.asset.id!, changes });
+    priced.push(ra);
+  }
+  if (patches.length > 0) await db.assets.bulkUpdate(patches);
+
+  // Phase 4: Payments — dividends, distributions and coupons with concurrency=3
+  const pricesOnly = options?.pricesOnly ?? false;
+  if (pricesOnly) {
+    result.synced += priced.length;
+  } else {
+    const paymentResults = await runWithConcurrency(
+      priced.map((ra) => () => syncPayments(ra, priceMap.get(ra.secid))),
+      3,
+    );
+    for (let i = 0; i < paymentResults.length; i++) {
+      const r = paymentResults[i];
+      if (r.status === 'fulfilled') {
+        result.synced++;
+        result.warnings.push(...r.value);
+      } else {
+        fail(priced[i], r.reason);
+      }
     }
   }
 
-  if (result.synced > 0) {
-    await db
-      .table('settings')
-      .put({ key: pricesOnly ? LAST_PRICE_SYNC_KEY : LAST_FULL_SYNC_KEY, value: new Date().toISOString() });
-  }
+  if (result.synced > 0) await markSynced(pricesOnly ? 'prices' : 'full');
 
   return result;
-}
-
-export async function getLastSyncAt(): Promise<Date | null> {
-  const setting = await db.table('settings').get(LAST_FULL_SYNC_KEY);
-  return setting ? new Date(setting.value) : null;
-}
-
-export async function getLastPriceSyncAt(): Promise<Date | null> {
-  const setting = await db.table('settings').get(LAST_PRICE_SYNC_KEY);
-  return setting ? new Date(setting.value) : null;
 }
 
 export async function syncSingleAsset(assetId: number): Promise<{ success: boolean; error?: string }> {
@@ -165,19 +185,17 @@ export async function syncSingleAsset(assetId: number): Promise<{ success: boole
   if (!asset || !isSyncable(asset)) return { success: false };
 
   try {
-    // Phase 1: Resolve
     const ra = await resolveAndCache(asset);
     if (!ra) return { success: false, error: 'Не найден на MOEX' };
 
-    // Phase 2: Batch prices (single asset)
-    const priceData = await fetchGroupPrices({
-      market: ra.market,
-      boardId: ra.boardId,
-      secids: [ra.secid],
-    });
+    const prices = await fetchGroupPrices({ market: ra.market, boardId: ra.boardId, secids: [ra.secid] });
+    let data = prices.get(ra.secid);
+    if (ra.market === 'bonds' && !data) data = (await fetchBondData(ra.secid, ra.boardId)) ?? undefined;
+    if (ra.market === 'bonds' && !data) return { success: false, error: NO_BOND_DATA };
 
-    // Phase 3: Enrich
-    await enrichAsset(ra, priceData.get(ra.secid));
+    const changes = pricePatch(ra, data, new Date());
+    if (changes) await db.assets.update(ra.asset.id!, changes);
+    await syncPayments(ra, data);
     return { success: true };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -274,41 +292,59 @@ async function fetchGroupPrices(
   return result;
 }
 
-// ============ Phase 3: Enrich ============
+// ============ Phase 3: Prices ============
 
-async function enrichAsset(
+const NO_BOND_DATA = 'Нет данных на MOEX';
+
+/** What the exchange says about the price, as a patch for the asset; null — nothing to write. */
+function pricePatch(
   ra: ResolvedAsset,
-  priceData: StockPriceResult | BondDataResult | undefined,
-  options?: { pricesOnly?: boolean },
-): Promise<string[]> {
+  data: StockPriceResult | BondDataResult | undefined,
+  now: Date,
+): Partial<Asset> | null {
+  const price = data?.currentPrice ?? data?.prevPrice;
+  if (!data || price == null) return null;
   if (ra.market === 'bonds') {
-    return enrichBond(ra, priceData as BondDataResult | undefined, options);
-  } else {
-    return enrichStock(ra, priceData as StockPriceResult | undefined, options);
+    // MOEX quotes a bond in percent of its face value.
+    const bond = data as BondDataResult;
+    return {
+      currentPrice: bond.faceValue * (price / 100),
+      faceValue: bond.faceValue,
+      accruedInterest: bond.accruedInterest,
+      updatedAt: now,
+    };
   }
+  return { currentPrice: price, updatedAt: now };
 }
 
-async function enrichStock(
+// ============ Phase 4: Payments ============
+
+/** Payments and their frequency for one security. Returns warnings for the user. */
+async function syncPayments(
   ra: ResolvedAsset,
-  priceData: StockPriceResult | undefined,
-  options?: { pricesOnly?: boolean },
+  priceData: StockPriceResult | BondDataResult | undefined,
 ): Promise<string[]> {
+  const ticker = ra.asset.ticker ?? ra.secid;
   const warnings: string[] = [];
 
-  // Write price from Phase 2 batch data
-  if (priceData) {
-    const currentPrice = priceData.currentPrice ?? priceData.prevPrice;
-    if (currentPrice != null) {
-      await db.assets.update(ra.asset.id!, {
-        currentPrice,
-        updatedAt: new Date(),
-      });
+  if (ra.market === 'bonds') {
+    const bondData = priceData as BondDataResult | undefined;
+    if (!bondData) throw new Error(NO_BOND_DATA);
+
+    await updateMoexAssetFields(ra.asset, {
+      frequencyPerYear: bondData.couponPeriod > 0 ? Math.min(Math.round(365 / bondData.couponPeriod), 52) : 2,
+      nextExpectedDate: bondData.nextCouponDate ? new Date(bondData.nextCouponDate) : undefined,
+    });
+
+    // Coupon history (not batchable)
+    const couponHistory = await fetchCouponHistory(ra.secid);
+    if (couponHistory.length > 0) {
+      await writePaymentHistory(ra.asset.id!, couponHistory, 'coupon');
+    } else if ((await storedPayments(ra.asset.id!)).length === 0) {
+      warnings.push(`${ticker}: купоны не загружены`);
     }
+    return warnings;
   }
-
-  if (options?.pricesOnly) return warnings;
-
-  const ticker = ra.asset.ticker ?? ra.secid;
 
   if (ra.asset.type === 'Фонды') {
     const { fundRows } = await syncFundDistributions(ra);
@@ -319,7 +355,6 @@ async function enrichStock(
     } else if (activeDates.length === 0 && !fundRows) {
       warnings.push(`${ticker}: распределения не загружены`);
     }
-
     return warnings;
   }
 
@@ -334,16 +369,11 @@ async function enrichStock(
   let nextExpectedCutoffDate: Date | undefined;
   if (dohodRows) {
     const now = new Date();
-    const nextForecast = dohodRows
+    nextExpectedCutoffDate = dohodRows
       .filter((r) => r.isForecast && r.date > now)
-      .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
-    if (nextForecast) {
-      nextExpectedCutoffDate = nextForecast.date;
-    }
+      .sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date;
   }
-  if (!nextExpectedCutoffDate) {
-    nextExpectedCutoffDate = divInfo?.summary.nextExpectedCutoffDate ?? undefined;
-  }
+  nextExpectedCutoffDate ??= divInfo?.summary.nextExpectedCutoffDate ?? undefined;
 
   if (frequencyPerYear != null) {
     await updateMoexAssetFields(ra.asset, { frequencyPerYear, nextExpectedCutoffDate });
@@ -456,56 +486,6 @@ async function syncFundDistributions(ra: ResolvedAsset): Promise<{
     await writeFromMoex(ra, 'distribution', 'parus', dropped);
   }
   return { fundRows };
-}
-
-async function enrichBond(
-  ra: ResolvedAsset,
-  priceData: BondDataResult | undefined,
-  options?: { pricesOnly?: boolean },
-): Promise<string[]> {
-  const warnings: string[] = [];
-
-  // If no batch data, try individual fetch as fallback
-  const bondData = priceData ?? await fetchBondData(ra.secid, ra.boardId);
-  if (!bondData) throw new Error('Нет данных на MOEX');
-
-  const pricePercent = bondData.currentPrice ?? bondData.prevPrice;
-  if (pricePercent != null) {
-    await db.assets.update(ra.asset.id!, {
-      currentPrice: bondData.faceValue * (pricePercent / 100),
-      faceValue: bondData.faceValue,
-      accruedInterest: bondData.accruedInterest,
-      updatedAt: new Date(),
-    });
-  }
-
-  if (options?.pricesOnly) return warnings;
-
-  const frequencyPerYear =
-    bondData.couponPeriod > 0
-      ? Math.min(Math.round(365 / bondData.couponPeriod), 52)
-      : 2;
-
-  await updateMoexAssetFields(ra.asset, {
-    frequencyPerYear,
-    nextExpectedDate: bondData.nextCouponDate
-      ? new Date(bondData.nextCouponDate)
-      : undefined,
-  });
-
-  // Fetch coupon history (not batchable)
-  const couponHistory = await fetchCouponHistory(ra.secid);
-  if (couponHistory.length > 0) {
-    await writePaymentHistory(ra.asset.id!, couponHistory, 'coupon');
-  } else {
-    // Coupon fetch returned empty — warn if no existing coupons
-    if ((await storedPayments(ra.asset.id!)).length === 0) {
-      const ticker = ra.asset.ticker ?? ra.secid;
-      warnings.push(`${ticker}: купоны не загружены`);
-    }
-  }
-
-  return warnings;
 }
 
 async function writePaymentHistory(

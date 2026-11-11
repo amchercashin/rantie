@@ -1,18 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
+import { isWelcomeDone } from '@/lib/hints';
+import { canPromptInstall, promptInstall, subscribeInstallPrompt } from '@/lib/install-prompt';
 import { readStorage, writeStorage } from '@/lib/safe-storage';
 
 // The `hi-` prefix is historical (the app was called HeroIncome). Renaming the keys would
-// forget who has already dismissed the banner, so they stay.
-const KEY_DISMISSED  = 'hi-a2hs-dismissed';
-const KEY_VISITS     = 'hi-a2hs-visits';
-const KEY_IOS_SEEN   = 'hi-a2hs-ios-seen';
-/**
- * Written by the onboarding that the welcome flow replaced; nothing writes it any more
- * (the welcome flow keeps `rt-welcome-done`, see lib/hints.ts). So the install banner and the
- * iOS guide show only to people who finished the old onboarding. Whether to bring them back
- * for everyone is an open product decision — switching to `isWelcomeDone()` does it.
- */
-const ONBOARDING_KEY = 'hi-onboarding-done';
+// forget who has already dismissed the invitation, so they stay.
+const KEY_DISMISSED = 'hi-a2hs-dismissed';
+const KEY_VISITS = 'hi-a2hs-visits';
 
 const VISITS_TO_RE_SHOW = 5;
 
@@ -32,7 +26,11 @@ export function getIsStandalone(): boolean {
   return false;
 }
 
-export function shouldShowButton(opts: {
+/**
+ * Whether to invite the user to install the app: on a phone, in a browser tab, after the welcome
+ * flow, and not within five visits of the last "no".
+ */
+export function shouldOfferInstall(opts: {
   onboardingDone: boolean;
   isStandalone: boolean;
   platform: Platform;
@@ -46,109 +44,54 @@ export function shouldShowButton(opts: {
   return true;
 }
 
-export function shouldAutoLaunchGuide(opts: {
-  platform: Platform;
-  visits: number;
-  isStandalone: boolean;
-  iosSeen: boolean;
-}): boolean {
-  return (
-    opts.platform === 'ios' &&
-    opts.visits >= 3 &&
-    !opts.isStandalone &&
-    !opts.iosSeen
-  );
-}
-
 interface InstallPromptState {
-  showButton: boolean;
+  /** Show the invitation. On Android only while the browser can actually show its install dialog. */
+  show: boolean;
   platform: Platform;
-  autoLaunchGuide: boolean;
-  promptInstall: () => void;
+  /** Android: opens the browser's install dialog. */
+  install: () => Promise<void>;
   dismiss: () => void;
-  markIosSeen: () => void;
 }
 
 export function useInstallPrompt(): InstallPromptState {
   const platform = useRef(getPlatform()).current;
   const standalone = useRef(getIsStandalone()).current;
-  const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
-  const [showButton, setShowButton] = useState(false);
-  const [autoLaunch, setAutoLaunch] = useState(false);
+  const [eligible, setEligible] = useState(false);
+  const canPrompt = useSyncExternalStore(subscribeInstallPrompt, canPromptInstall);
 
   useEffect(() => {
     if (standalone) return;
 
-    const onboardingDone = readStorage(ONBOARDING_KEY) === '1';
-    const iosSeen = readStorage(KEY_IOS_SEEN) === '1';
     const dismissedAt = readStorage(KEY_DISMISSED);
     const dismissTs = dismissedAt ? Number(dismissedAt) : null;
 
-    const prevVisits = Number(readStorage(KEY_VISITS) || '0');
-    const visits = prevVisits + 1;
+    const visits = Number(readStorage(KEY_VISITS) || '0') + 1;
     writeStorage(KEY_VISITS, String(visits));
 
-    const visitsSinceDismiss = dismissTs ? visits : 0;
-
-    setShowButton(shouldShowButton({
-      onboardingDone,
+    setEligible(shouldOfferInstall({
+      onboardingDone: isWelcomeDone(),
       isStandalone: standalone,
       platform,
       dismissedAt: dismissTs,
-      visitsSinceDismiss,
-    }));
-
-    setAutoLaunch(shouldAutoLaunchGuide({
-      platform,
-      visits,
-      isStandalone: standalone,
-      iosSeen,
+      visitsSinceDismiss: dismissTs ? visits : 0,
     }));
   }, [platform, standalone]);
-
-  useEffect(() => {
-    if (platform !== 'android') return;
-    const handler = (e: BeforeInstallPromptEvent) => {
-      e.preventDefault();
-      deferredPrompt.current = e;
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, [platform]);
-
-  const promptInstall = useCallback(() => {
-    deferredPrompt.current?.prompt();
-    deferredPrompt.current = null;
-  }, []);
 
   const dismiss = useCallback(() => {
     writeStorage(KEY_DISMISSED, String(Date.now()));
     writeStorage(KEY_VISITS, '0');
-    setShowButton(false);
+    setEligible(false);
   }, []);
 
-  const markIosSeen = useCallback(() => {
-    writeStorage(KEY_IOS_SEEN, '1');
-    setAutoLaunch(false);
-  }, []);
+  const install = useCallback(async () => {
+    // "Not now" in the browser's dialog is the same answer as closing the invitation.
+    if ((await promptInstall()) === 'dismissed') dismiss();
+  }, [dismiss]);
 
   return {
-    showButton,
+    show: eligible && (platform === 'ios' || canPrompt),
     platform,
-    autoLaunchGuide: autoLaunch,
-    promptInstall,
+    install,
     dismiss,
-    markIosSeen,
   };
-}
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
-
-declare global {
-  interface WindowEventMap {
-    beforeinstallprompt: BeforeInstallPromptEvent;
-  }
 }

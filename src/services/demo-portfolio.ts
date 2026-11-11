@@ -101,7 +101,7 @@ const DEMO: DemoAsset[] = [
 ];
 
 export async function getDemoAccountId(): Promise<number | null> {
-  const row = await db.table('settings').get(DEMO_ACCOUNT_SETTING);
+  const row = await db.settings.get(DEMO_ACCOUNT_SETTING);
   if (!row) return null;
   const id = Number(row.value);
   if (!Number.isFinite(id)) return null;
@@ -113,7 +113,7 @@ export async function loadDemoPortfolio(now: Date = new Date()): Promise<number>
   const existing = await getDemoAccountId();
   if (existing != null) return existing;
 
-  return db.transaction('rw', [db.accounts, db.assets, db.holdings, db.paymentHistory, db.table('settings')], async () => {
+  return db.transaction('rw', [db.accounts, db.assets, db.holdings, db.paymentHistory, db.settings], async () => {
     const accountId = (await db.accounts.add({ name: DEMO_ACCOUNT_NAME, createdAt: now, updatedAt: now })) as number;
 
     for (const item of DEMO) {
@@ -141,7 +141,7 @@ export async function loadDemoPortfolio(now: Date = new Date()): Promise<number>
       }
     }
 
-    await db.table('settings').put({ key: DEMO_ACCOUNT_SETTING, value: String(accountId) });
+    await db.settings.put({ key: DEMO_ACCOUNT_SETTING, value: String(accountId) });
     return accountId;
   });
 }
@@ -149,5 +149,5 @@ export async function loadDemoPortfolio(now: Date = new Date()): Promise<number>
 export async function removeDemoPortfolio(): Promise<void> {
   const id = await getDemoAccountId();
   if (id != null) await deleteAccount(id);
-  await db.table('settings').delete(DEMO_ACCOUNT_SETTING);
+  await db.settings.delete(DEMO_ACCOUNT_SETTING);
 }

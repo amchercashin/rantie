@@ -23,7 +23,7 @@ import { useBackupReminder } from '@/hooks/use-backup-reminder';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { useIncomeGoal } from '@/hooks/use-income-goal';
 import { setIncomeGoal } from '@/services/income-goal';
-import { InstallButton } from '@/components/install-button';
+import { InstallCard } from '@/components/install-card';
 import { upcomingPayments } from '@/services/income-projection';
 import { loadDemoPortfolio, removeDemoPortfolio } from '@/services/demo-portfolio';
 import { withViewTransition } from '@/lib/view-transition';
@@ -244,17 +244,11 @@ export function MainPage() {
           <Section ref={structureRef} title="Откуда доход" className="mt-8">
             <IncomeStructure categories={categories} mode={mode} animate={animate} />
           </Section>
-        </>
-      )}
 
-      {install.showButton && (
-        <InstallButton
-          platform={install.platform}
-          autoLaunchGuide={install.autoLaunchGuide}
-          onInstall={install.promptInstall}
-          onDismiss={install.dismiss}
-          onIosSeen={install.markIosSeen}
-        />
+          {install.show && (
+            <InstallCard platform={install.platform} onInstall={install.install} onDismiss={install.dismiss} className="mt-8" />
+          )}
+        </>
       )}
     </AppShell>
   );

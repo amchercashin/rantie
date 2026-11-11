@@ -9,7 +9,7 @@ import { plural } from '@/lib/utils';
 const GOAL_KEY = 'income-goal-month';
 
 export async function getIncomeGoal(): Promise<number | null> {
-  const row = (await db.table('settings').get(GOAL_KEY)) as { key: string; value: string } | undefined;
+  const row = await db.settings.get(GOAL_KEY);
   if (!row) return null;
   const value = Number(row.value);
   return Number.isFinite(value) && value > 0 ? value : null;
@@ -17,12 +17,11 @@ export async function getIncomeGoal(): Promise<number | null> {
 
 /** Pass null to remove the goal. */
 export async function setIncomeGoal(perMonth: number | null): Promise<void> {
-  const settings = db.table('settings');
   if (perMonth == null || !Number.isFinite(perMonth) || perMonth <= 0) {
-    await settings.delete(GOAL_KEY);
+    await db.settings.delete(GOAL_KEY);
     return;
   }
-  await settings.put({ key: GOAL_KEY, value: String(Math.round(perMonth)) });
+  await db.settings.put({ key: GOAL_KEY, value: String(Math.round(perMonth)) });
 }
 
 export interface GoalProgress {

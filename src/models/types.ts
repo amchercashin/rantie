@@ -1,5 +1,11 @@
 export type DataSource = 'moex' | 'dohod' | 'parus' | 'import' | 'manual';
 
+/** A row of the key–value `settings` table: tax rates, the income goal, sync timestamps, the demo account. */
+export interface AppSetting {
+  key: string;
+  value: string;
+}
+
 export interface ExchangeRate {
   currency: string;
   rateToRub: number;

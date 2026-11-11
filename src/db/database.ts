@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Asset, PaymentHistory, ImportRecord, ExchangeRate } from '@/models/types';
+import type { AppSetting, Asset, PaymentHistory, ImportRecord, ExchangeRate } from '@/models/types';
 import type { Account, Holding } from '@/models/account';
 
 const FREQUENCY_DEFAULTS: Record<string, number> = {
@@ -17,6 +17,7 @@ class HeroIncomeDB extends Dexie {
   paymentHistory!: EntityTable<PaymentHistory, 'id'>;
   importRecords!: EntityTable<ImportRecord, 'id'>;
   exchangeRates!: EntityTable<ExchangeRate, 'currency'>;
+  settings!: EntityTable<AppSetting, 'key'>;
 
   constructor() {
     super('HeroIncomeDB');

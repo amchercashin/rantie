@@ -13,7 +13,9 @@ vi.mock('@/services/heroincome-data', () => ({
   isFundIndexLoaded: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock('@/services/moex-api', () => ({
+vi.mock('@/services/moex-api', async (importOriginal) => ({
+  // Pure math: the real one, so frequency is checked too.
+  calcDividendFrequency: (await importOriginal<typeof import('@/services/moex-api')>()).calcDividendFrequency,
   resolveSecurityInfo: vi.fn(),
   fetchStockPrice: vi.fn(),
   fetchBondData: vi.fn(),
@@ -979,6 +981,129 @@ describe('syncAllAssets', () => {
       const records = await db.paymentHistory.where('assetId').equals(assetId).toArray();
       expect(records).toHaveLength(1);
       expect(records[0].dataSource).toBe('dohod');
+    });
+
+    // MOEX ISS stopped serving dividends in autumn 2026, so a security outside dohod.ru / Parus
+    // often gets nothing at all. The user's own payments must not be thrown away for nothing.
+    describe('per-asset sync: outcome and manual payments', () => {
+      const MANUAL = { amount: 50, date: new Date('2026-05-15'), dataSource: 'manual' as const };
+      const sources = async (assetId: number) =>
+        (await db.paymentHistory.where('assetId').equals(assetId).toArray()).map((r) => r.dataSource).sort();
+
+      it('keeps manual dividends when no source has the stock', async () => {
+        const assetId = (await db.assets.add(LKOH)) as number;
+        await db.paymentHistory.add({ assetId, type: 'dividend', ...MANUAL });
+        (fetchDividends as Mock).mockResolvedValue(null);
+
+        const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+        expect(result).toEqual({ success: true, outcome: 'no-source' });
+        expect(await sources(assetId)).toEqual(['manual']);
+      });
+
+      it('keeps manual dividends when dohod lists the stock but gives no payments', async () => {
+        const assetId = (await db.assets.add(LKOH)) as number;
+        await db.paymentHistory.add({ assetId, type: 'dividend', ...MANUAL });
+        (isDohodAvailable as Mock).mockResolvedValue(true);
+        (fetchDohodDividends as Mock).mockResolvedValue([]);
+
+        const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+        expect(result.outcome).toBe('no-source');
+        expect(await sources(assetId)).toEqual(['manual']);
+      });
+
+      it('replaces manual dividends once dohod gives payments', async () => {
+        const assetId = (await db.assets.add(LKOH)) as number;
+        await db.paymentHistory.add({ assetId, type: 'dividend', ...MANUAL });
+        (isDohodAvailable as Mock).mockResolvedValue(true);
+        (fetchDohodDividends as Mock).mockResolvedValue([
+          { date: new Date('2025-01-13'), amount: 541, isForecast: false },
+          { date: new Date('2026-01-12'), amount: 397, isForecast: false },
+        ]);
+
+        const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+        expect(result).toEqual({ success: true, outcome: 'loaded' });
+        expect(await sources(assetId)).toEqual(['dohod', 'dohod']);
+        // Yearly: counted from the payments that stay (with the deleted manual one it would be 2).
+        expect((await db.assets.get(assetId))!.frequencyPerYear).toBe(1);
+      });
+
+      it('keeps manual payments without replaceManual even when a source answers', async () => {
+        const assetId = (await db.assets.add(LKOH)) as number;
+        await db.paymentHistory.add({ assetId, type: 'dividend', ...MANUAL });
+
+        const result = await syncAssetPayments(assetId);
+
+        expect(result).toEqual({ success: true, outcome: 'loaded' });
+        expect(await sources(assetId)).toEqual(['manual', 'moex', 'moex']);
+      });
+
+      it('reports an unreachable source and keeps manual dividends', async () => {
+        const assetId = (await db.assets.add(LKOH)) as number;
+        await db.paymentHistory.add({ assetId, type: 'dividend', ...MANUAL });
+        (isDohodIndexLoaded as Mock).mockResolvedValue(false);
+        (fetchDividends as Mock).mockResolvedValue(null);
+
+        const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+        expect(result.outcome).toBe('unreachable');
+        expect(await sources(assetId)).toEqual(['manual']);
+      });
+
+      it('keeps manual distributions when no source has the fund', async () => {
+        const assetId = (await db.assets.add(PLZ5)) as number;
+        await db.paymentHistory.add({ assetId, type: 'distribution', ...MANUAL });
+        (fetchDividends as Mock).mockResolvedValue(null);
+
+        const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+        expect(result.outcome).toBe('no-source');
+        expect(await sources(assetId)).toEqual(['manual']);
+      });
+
+      it('keeps manual distributions when the fund file is listed but empty', async () => {
+        const assetId = (await db.assets.add(PLZ5)) as number;
+        await db.paymentHistory.add({ assetId, type: 'distribution', ...MANUAL });
+        (findFundKey as Mock).mockResolvedValue('RU000A1022Z1');
+        (fetchFundDistributions as Mock).mockResolvedValue([]);
+        (fetchDividends as Mock).mockResolvedValue(null);
+
+        const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+        expect(result.outcome).toBe('no-source');
+        expect(await sources(assetId)).toEqual(['manual']);
+      });
+
+      it('replaces manual distributions once Parus gives payments', async () => {
+        const assetId = (await db.assets.add(PLZ5)) as number;
+        await db.paymentHistory.add({ assetId, type: 'distribution', ...MANUAL });
+        (findFundKey as Mock).mockResolvedValue('RU000A1022Z1');
+        (fetchFundDistributions as Mock).mockResolvedValue([
+          { date: new Date('2026-09-30'), amount: 72.45 },
+          { date: new Date('2026-10-30'), amount: 72.45 },
+        ]);
+
+        const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+        expect(result).toEqual({ success: true, outcome: 'loaded' });
+        expect(await sources(assetId)).toEqual(['parus', 'parus']);
+      });
+
+      it('keeps manual coupons when MOEX gives no coupons', async () => {
+        const assetId = (await db.assets.add({
+          type: 'Облигации', name: 'ОФЗ 26238', ticker: 'SU26238RMFS4', moexSecid: 'SU26238RMFS4',
+          moexBoardId: 'TQOB', moexMarket: 'bonds' as const, dataSource: 'manual' as const,
+          createdAt: new Date(), updatedAt: new Date(), ...ASSET_DEFAULTS,
+        })) as number;
+        await db.paymentHistory.add({ assetId, type: 'coupon', ...MANUAL });
+
+        const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+        expect(result).toEqual({ success: true });
+        expect(await sources(assetId)).toEqual(['manual']);
+      });
     });
   });
 

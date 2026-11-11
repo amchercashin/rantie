@@ -5,7 +5,8 @@ import { getTypeColor } from '@/models/account';
 import { Card, CategoryDot } from '@/components/ds/surface';
 import { useFeedback } from '@/components/ds/feedback';
 import { AssetPayments } from './asset-payments';
-import { isSyncable, syncAssetPayments, deleteManualPayments } from '@/services/moex-sync';
+import { isSyncable, syncAssetPayments } from '@/services/moex-sync';
+import { categorySyncMessage } from '@/lib/payment-sync-message';
 import { cn, plural } from '@/lib/utils';
 
 interface TypeSectionProps {
@@ -34,25 +35,29 @@ export function TypeSection({ type, assets, paymentsByAsset, highlightAssetId }:
     if (manualCount > 0) {
       const ok = await confirm({
         title: `Обновить выплаты: ${type}?`,
-        description: `Ручные выплаты (${manualCount}) будут заменены данными Мосбиржи и dohod.ru.`,
+        description: `Ручные выплаты (${manualCount}) заменятся загруженными. Если источники ничего не найдут, ручные останутся.`,
         confirmLabel: 'Обновить',
       });
       if (!ok) return;
     }
     setSyncing(true);
     let failed = 0;
+    let unreachable = 0;
+    const noSource: string[] = [];
     try {
       for (const asset of syncableAssets) {
-        if (manualCount > 0) await deleteManualPayments(asset.id!);
-        const result = await syncAssetPayments(asset.id!);
+        const result = await syncAssetPayments(asset.id!, { replaceManual: manualCount > 0 });
         if (!result.success) failed++;
+        else if (result.outcome === 'unreachable') unreachable++;
+        else if (result.outcome === 'no-source') noSource.push(asset.ticker ?? asset.name);
       }
     } catch {
       failed++;
     } finally {
       setSyncing(false);
     }
-    toast(failed > 0 ? `Не удалось обновить: ${failed}` : `${type}: выплаты обновлены`, failed > 0 ? 'error' : 'success');
+    const message = categorySyncMessage(type, { failed, unreachable, noSource });
+    toast(message.text, message.tone);
   };
 
   return (

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { migrateDbName } from './db/migrate-db-name';
+import { listenForInstallPrompt } from './lib/install-prompt';
 import App from './App';
 import './index.css';
 
@@ -19,6 +20,9 @@ if ('serviceWorker' in navigator) {
     }
   });
 }
+
+// Android offers the install once, right after the page loads — before the main page mounts.
+listenForInstallPrompt();
 
 const SPLASH_STORAGE_KEY = 'rt-splash-seen-v2';
 const SPLASH_DURATION_MS = 1900;

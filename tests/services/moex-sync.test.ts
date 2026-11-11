@@ -759,6 +759,8 @@ describe('syncAllAssets', () => {
     expect(records.every(r => !r.isForecast)).toBe(true);
     expect(fetchDividends).not.toHaveBeenCalled();
     expect(isDohodAvailable).not.toHaveBeenCalled();
+    // The fund is looked up by every code it has, the MOEX one included.
+    expect(findFundKey).toHaveBeenCalledWith('PLZ5', 'RU000A1022Z1', 'PLZ5');
   });
 
   it('falls back to MOEX when fund not in heroincome-data', async () => {

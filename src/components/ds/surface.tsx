@@ -1,4 +1,4 @@
-import { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
+import { forwardRef, type HTMLAttributes, type ReactNode, type Ref } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,11 +23,12 @@ interface SectionProps {
   className?: string;
   /** Extra line under the title */
   description?: ReactNode;
+  ref?: Ref<HTMLElement>;
 }
 
-export function Section({ title, action, description, children, className }: SectionProps) {
+export function Section({ title, action, description, children, className, ref }: SectionProps) {
   return (
-    <section className={cn('mt-8 first:mt-0', className)}>
+    <section ref={ref} className={cn('mt-8 first:mt-0', className)}>
       {(title || action) && (
         <div className="flex items-end justify-between gap-3 mb-3 px-1">
           <div className="min-w-0">

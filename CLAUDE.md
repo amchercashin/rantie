@@ -76,6 +76,7 @@ Per-category tax rates stored in Dexie `settings` table with `ndfl-{category}` k
 
 Bottom tab bar (`src/components/layout/tab-bar.tsx`) + `AppShell` (large serif title that collapses into the glass header on scroll; `back` prop shows a back chevron with a fallback route).
 Page navigation uses the View Transitions API. `withViewTransition(cb, direction)` in `src/lib/view-transition.ts` sets `<html data-nav="forward|back|tab">` so CSS can slide forward/back or crossfade between tabs; the tab bar has its own `view-transition-name` and stays still. `TransitionLink` (with optional `direction`) replaces React Router's `Link` for all in-app navigation. Reduced motion disables all of it.
+Jumps within a page use `scrollToWithPeek(target)` (`src/lib/smooth-scroll.ts`), not native `behavior: 'smooth'`: an eased rAF scroll of 0.4–0.7 s that leaves 60px of the content above in view (so it reads as the same page), stops on any touch/wheel/key, and jumps instantly with reduced motion. Tapping Доходность / Капитал on Доход uses it to reach «Ближайшие выплаты» (or «Откуда доход» when there are none).
 
 ### Tooling details
 

@@ -2,7 +2,7 @@ import Dexie from 'dexie';
 import { isExchangeTraded } from '@/models/asset-kind';
 import { db } from '@/db/database';
 import type { Asset, PaymentHistory, DataSource } from '@/models/types';
-import type { DividendHistoryRow, StockPriceResult, BondDataResult } from './moex-api';
+import type { DividendHistoryRow, DividendResult, StockPriceResult, BondDataResult } from './moex-api';
 import {
   resolveSecurityInfo,
   fetchBondData,
@@ -16,6 +16,8 @@ import {
 import {
   fetchDohodDividends,
   isDohodAvailable,
+  isDohodIndexLoaded,
+  isFundIndexLoaded,
   resetDohodCache,
   findFundKey,
   fetchFundDistributions,
@@ -308,48 +310,12 @@ async function enrichStock(
 
   const ticker = ra.asset.ticker ?? ra.secid;
 
-  // ---- Fund distribution path (heroincome-data > moex) ----
   if (ra.asset.type === 'Фонды') {
-    const fundKey = await findFundKey(ra.asset.ticker, ra.asset.isin);
-    let fundRows: Awaited<ReturnType<typeof fetchFundDistributions>> = null;
-    if (fundKey) {
-      fundRows = await fetchFundDistributions(fundKey);
-    }
+    const { fundRows } = await syncFundDistributions(ra);
+    const activeDates = await storedPaymentDates(ra.asset.id!);
 
-    if (fundRows && fundRows.length > 0) {
-      // heroincome-data (Parus) covers this fund — remove old moex distribution records
-      const oldMoex = await db.paymentHistory
-        .where('assetId').equals(ra.asset.id!)
-        .filter(r => r.dataSource === 'moex' && r.type === 'distribution')
-        .toArray();
-      if (oldMoex.length > 0) {
-        await db.paymentHistory.bulkDelete(oldMoex.map(r => r.id!));
-      }
-      await writePaymentHistory(ra.asset.id!, fundRows, 'distribution', 'parus');
-    } else {
-      // Fallback to MOEX
-      const divInfo = await fetchDividends(ra.secid);
-      if (divInfo) {
-        await writePaymentHistory(ra.asset.id!, divInfo.history, 'distribution', 'moex');
-      }
-    }
-
-    // Recalculate frequency from non-forecast DB records
-    const dbRecords = await db.paymentHistory
-      .where('[assetId+date]')
-      .between([ra.asset.id!, Dexie.minKey], [ra.asset.id!, Dexie.maxKey])
-      .toArray();
-    const activeDates = dbRecords
-      .filter((r) => !r.isForecast)
-      .map((r) => r.date)
-      .sort((a, b) => a.getTime() - b.getTime());
-
-    const frequencyPerYear = activeDates.length >= 2
-      ? calcDividendFrequency(activeDates)
-      : undefined;
-
-    if (frequencyPerYear != null) {
-      await updateMoexAssetFields(ra.asset, { frequencyPerYear });
+    if (activeDates.length >= 2) {
+      await updateMoexAssetFields(ra.asset, { frequencyPerYear: calcDividendFrequency(activeDates) });
     } else if (activeDates.length === 0 && !fundRows) {
       warnings.push(`${ticker}: распределения не загружены`);
     }
@@ -357,44 +323,8 @@ async function enrichStock(
     return warnings;
   }
 
-  // ---- Stock dividend path (dohod > moex) ----
-  const dohodAvailable = await isDohodAvailable(ticker);
-
-  let dohodRows: Awaited<ReturnType<typeof fetchDohodDividends>> = null;
-  if (dohodAvailable) {
-    dohodRows = await fetchDohodDividends(ticker);
-  }
-
-  let divInfo: Awaited<ReturnType<typeof fetchDividends>> = null;
-
-  if (dohodRows) {
-    // dohod covers this asset — remove old moex dividend records
-    const oldMoex = await db.paymentHistory
-      .where('assetId').equals(ra.asset.id!)
-      .filter(r => r.dataSource === 'moex' && r.type === 'dividend')
-      .toArray();
-    if (oldMoex.length > 0) {
-      await db.paymentHistory.bulkDelete(oldMoex.map(r => r.id!));
-    }
-
-    await writePaymentHistory(ra.asset.id!, dohodRows, 'dividend', 'dohod');
-  } else {
-    // Fallback to MOEX
-    divInfo = await fetchDividends(ra.secid);
-    if (divInfo) {
-      await writePaymentHistory(ra.asset.id!, divInfo.history, 'dividend', 'moex');
-    }
-  }
-
-  // Recalculate frequency from non-forecast DB records
-  const dbRecords = await db.paymentHistory
-    .where('[assetId+date]')
-    .between([ra.asset.id!, Dexie.minKey], [ra.asset.id!, Dexie.maxKey])
-    .toArray();
-  const activeDates = dbRecords
-    .filter((r) => !r.isForecast)
-    .map((r) => r.date)
-    .sort((a, b) => a.getTime() - b.getTime());
+  const { dohodRows, divInfo } = await syncStockDividends(ra);
+  const activeDates = await storedPaymentDates(ra.asset.id!);
 
   const frequencyPerYear = activeDates.length >= 2
     ? calcDividendFrequency(activeDates)
@@ -422,6 +352,110 @@ async function enrichStock(
   }
 
   return warnings;
+}
+
+// ============ Payment sources ============
+//
+// Payments of one security come from one source at a time: the preferred one (dohod.ru for
+// dividends, Parus via heroincome-data for fund distributions) or MOEX as a fallback. Rows of
+// two sources stored side by side would count every payment twice.
+
+type PreferredSource = 'dohod' | 'parus';
+
+async function storedPayments(assetId: number): Promise<PaymentHistory[]> {
+  return db.paymentHistory
+    .where('[assetId+date]')
+    .between([assetId, Dexie.minKey], [assetId, Dexie.maxKey])
+    .toArray();
+}
+
+/** Dates of the asset's real (non-forecast) payments, oldest first — the basis of its frequency. */
+async function storedPaymentDates(assetId: number): Promise<Date[]> {
+  return (await storedPayments(assetId))
+    .filter((r) => !r.isForecast)
+    .map((r) => r.date)
+    .sort((a, b) => a.getTime() - b.getTime());
+}
+
+async function deleteStoredPayments(
+  assetId: number,
+  type: PaymentHistory['type'],
+  dataSource: DataSource,
+): Promise<boolean> {
+  const stale = (await storedPayments(assetId)).filter((r) => r.type === type && r.dataSource === dataSource);
+  if (stale.length > 0) await db.paymentHistory.bulkDelete(stale.map((r) => r.id!));
+  return stale.length > 0;
+}
+
+/** The preferred source answered: its rows replace whatever MOEX had given before. */
+async function writeFromPreferred(
+  assetId: number,
+  rows: (DividendHistoryRow & { isForecast?: boolean })[],
+  type: PaymentHistory['type'],
+  source: PreferredSource,
+): Promise<void> {
+  await deleteStoredPayments(assetId, type, 'moex');
+  await writePaymentHistory(assetId, rows, type, source);
+}
+
+/**
+ * The preferred source gave nothing this time, so MOEX is next in line.
+ * - Its rows are stored and it is merely unreachable (`dropped` is false: no index — offline,
+ *   GitHub blocked — or one file failed to load): they stay as they are and MOEX is not asked.
+ * - It no longer lists the security (`dropped`): MOEX takes over, and the old rows go only once
+ *   MOEX has actually answered.
+ * - Nothing of it is stored: plain fallback to MOEX.
+ */
+async function writeFromMoex(
+  ra: ResolvedAsset,
+  type: PaymentHistory['type'],
+  preferred: PreferredSource,
+  dropped: boolean,
+): Promise<DividendResult | null> {
+  const assetId = ra.asset.id!;
+  const hasPreferredRows = (await storedPayments(assetId)).some((r) => r.type === type && r.dataSource === preferred);
+  if (hasPreferredRows && !dropped) return null;
+
+  const divInfo = await fetchDividends(ra.secid);
+  if (divInfo) {
+    if (hasPreferredRows) await deleteStoredPayments(assetId, type, preferred);
+    await writePaymentHistory(assetId, divInfo.history, type, 'moex');
+  }
+  return divInfo;
+}
+
+/** Stock dividends: dohod.ru first, MOEX as a fallback. */
+async function syncStockDividends(ra: ResolvedAsset): Promise<{
+  dohodRows: Awaited<ReturnType<typeof fetchDohodDividends>>;
+  divInfo: DividendResult | null;
+}> {
+  const ticker = ra.asset.ticker ?? ra.secid;
+  const covered = await isDohodAvailable(ticker);
+  const dohodRows = covered ? await fetchDohodDividends(ticker) : null;
+
+  if (dohodRows) {
+    await writeFromPreferred(ra.asset.id!, dohodRows, 'dividend', 'dohod');
+    return { dohodRows, divInfo: null };
+  }
+
+  const dropped = !covered && (await isDohodIndexLoaded());
+  return { dohodRows: null, divInfo: await writeFromMoex(ra, 'dividend', 'dohod', dropped) };
+}
+
+/** Fund distributions: heroincome-data (Parus) first, MOEX as a fallback. */
+async function syncFundDistributions(ra: ResolvedAsset): Promise<{
+  fundRows: Awaited<ReturnType<typeof fetchFundDistributions>>;
+}> {
+  const fundKey = await findFundKey(ra.asset.ticker, ra.asset.isin);
+  const fundRows = fundKey ? await fetchFundDistributions(fundKey) : null;
+
+  if (fundRows && fundRows.length > 0) {
+    await writeFromPreferred(ra.asset.id!, fundRows, 'distribution', 'parus');
+  } else {
+    const dropped = !fundKey && (await isFundIndexLoaded());
+    await writeFromMoex(ra, 'distribution', 'parus', dropped);
+  }
+  return { fundRows };
 }
 
 async function enrichBond(
@@ -465,11 +499,7 @@ async function enrichBond(
     await writePaymentHistory(ra.asset.id!, couponHistory, 'coupon');
   } else {
     // Coupon fetch returned empty — warn if no existing coupons
-    const existing = await db.paymentHistory
-      .where('[assetId+date]')
-      .between([ra.asset.id!, Dexie.minKey], [ra.asset.id!, Dexie.maxKey])
-      .count();
-    if (existing === 0) {
+    if ((await storedPayments(ra.asset.id!)).length === 0) {
       const ticker = ra.asset.ticker ?? ra.secid;
       warnings.push(`${ticker}: купоны не загружены`);
     }
@@ -483,7 +513,6 @@ async function writePaymentHistory(
   rows: (DividendHistoryRow & { isForecast?: boolean })[],
   type: PaymentHistory['type'],
   dataSource: DataSource = 'moex',
-  isForecast?: boolean,
 ): Promise<void> {
   const existing = await db.paymentHistory
     .where('[assetId+date]')
@@ -499,7 +528,7 @@ async function writePaymentHistory(
       date: row.date,
       type,
       dataSource,
-      ...((row.isForecast ?? isForecast) ? { isForecast: true } : {}),
+      ...(row.isForecast ? { isForecast: true } : {}),
     });
   }
 
@@ -563,82 +592,15 @@ export async function syncAssetPayments(assetId: number): Promise<{ success: boo
       if (couponHistory.length > 0) {
         await writePaymentHistory(ra.asset.id!, couponHistory, 'coupon');
       }
-    } else if (ra.asset.type === 'Фонды') {
-      // Fund distribution path (heroincome-data > moex)
-      const fundKey = await findFundKey(ra.asset.ticker, ra.asset.isin);
-      let fundRows: Awaited<ReturnType<typeof fetchFundDistributions>> = null;
-      if (fundKey) {
-        fundRows = await fetchFundDistributions(fundKey);
-      }
+      return { success: true };
+    }
 
-      if (fundRows && fundRows.length > 0) {
-        const oldMoex = await db.paymentHistory
-          .where('assetId').equals(ra.asset.id!)
-          .filter(r => r.dataSource === 'moex' && r.type === 'distribution')
-          .toArray();
-        if (oldMoex.length > 0) {
-          await db.paymentHistory.bulkDelete(oldMoex.map(r => r.id!));
-        }
-        await writePaymentHistory(ra.asset.id!, fundRows, 'distribution', 'parus');
-      } else {
-        const divInfo = await fetchDividends(ra.secid);
-        if (divInfo) {
-          await writePaymentHistory(ra.asset.id!, divInfo.history, 'distribution', 'moex');
-        }
-      }
+    if (ra.asset.type === 'Фонды') await syncFundDistributions(ra);
+    else await syncStockDividends(ra);
 
-      const dbRecords = await db.paymentHistory
-        .where('[assetId+date]')
-        .between([ra.asset.id!, Dexie.minKey], [ra.asset.id!, Dexie.maxKey])
-        .toArray();
-      const activeDates = dbRecords
-        .filter((r) => !r.isForecast)
-        .map((r) => r.date)
-        .sort((a, b) => a.getTime() - b.getTime());
-      if (activeDates.length >= 2) {
-        const frequencyPerYear = calcDividendFrequency(activeDates);
-        await updateMoexAssetFields(ra.asset, { frequencyPerYear });
-      }
-    } else {
-      // Stock dividend path (dohod > moex)
-      const ticker = ra.asset.ticker ?? ra.secid;
-      const dohodAvailable = await isDohodAvailable(ticker);
-
-      let dohodRows: Awaited<ReturnType<typeof fetchDohodDividends>> = null;
-      if (dohodAvailable) {
-        dohodRows = await fetchDohodDividends(ticker);
-      }
-
-      if (dohodRows) {
-        // dohod covers this asset — remove old moex dividend records
-        const oldMoex = await db.paymentHistory
-          .where('assetId').equals(ra.asset.id!)
-          .filter(r => r.dataSource === 'moex' && r.type === 'dividend')
-          .toArray();
-        if (oldMoex.length > 0) {
-          await db.paymentHistory.bulkDelete(oldMoex.map(r => r.id!));
-        }
-
-        await writePaymentHistory(ra.asset.id!, dohodRows, 'dividend', 'dohod');
-      } else {
-        const divInfo = await fetchDividends(ra.secid);
-        if (divInfo) {
-          await writePaymentHistory(ra.asset.id!, divInfo.history, 'dividend', 'moex');
-        }
-      }
-
-      const dbRecords = await db.paymentHistory
-        .where('[assetId+date]')
-        .between([ra.asset.id!, Dexie.minKey], [ra.asset.id!, Dexie.maxKey])
-        .toArray();
-      const activeDates = dbRecords
-        .filter((r) => !r.isForecast)
-        .map((r) => r.date)
-        .sort((a, b) => a.getTime() - b.getTime());
-      if (activeDates.length >= 2) {
-        const frequencyPerYear = calcDividendFrequency(activeDates);
-        await updateMoexAssetFields(ra.asset, { frequencyPerYear });
-      }
+    const activeDates = await storedPaymentDates(ra.asset.id!);
+    if (activeDates.length >= 2) {
+      await updateMoexAssetFields(ra.asset, { frequencyPerYear: calcDividendFrequency(activeDates) });
     }
 
     return { success: true };

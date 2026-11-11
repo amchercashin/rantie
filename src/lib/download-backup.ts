@@ -10,6 +10,7 @@ export async function downloadBackup(): Promise<void> {
   a.href = url;
   a.download = `rantie-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
-  URL.revokeObjectURL(url);
+  // Safari starts the download asynchronously: revoking the URL right away can cancel it.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
   markBackupDone();
 }

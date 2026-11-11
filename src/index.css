@@ -1,9 +1,10 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+/* Class names are collected only from the app itself. Without this Tailwind scans every file in the
+   repository (docs, plans, CLAUDE.md, tests) and ships utilities for class names it meets there. */
+@import "tailwindcss" source(none);
+@source "../src";
+@source "../index.html";
 @import "@fontsource-variable/manrope/wght.css";
 @import "@fontsource-variable/cormorant-garamond/wght.css";
-@import "@fontsource-variable/cormorant-garamond/wght-italic.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -345,14 +346,6 @@ html[data-nav="tab"]::view-transition-new(root) { animation: hi-vt-fade-rise 260
 }
 
 /* ── Bottom sheets (radix dialog) ────────────────────────────────────── */
-[data-slot="sheet-content"] {
-  overflow-x: hidden;
-  overflow-wrap: anywhere;
-  max-width: 100%;
-}
-[data-slot="sheet-content"][data-side="bottom"] {
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
-}
 .hi-sheet[data-state="open"] { animation: hi-sheet-up 420ms var(--hi-ease-out) both; }
 .hi-sheet[data-state="closed"] { animation: hi-sheet-down 240ms ease-in both; }
 /* Swiped away: keep the swipe's momentum instead of easing in from rest (the drag offset itself is `translate`). */

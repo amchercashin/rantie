@@ -58,16 +58,6 @@ interface FundIndex {
   funds: string[];
 }
 
-// ---- Caches ----
-
-let cachedStockIndex: DohodIndex | null | undefined; // undefined = not fetched
-let cachedFundIndex: FundIndex | null | undefined;
-
-export function resetDohodCache(): void {
-  cachedStockIndex = undefined;
-  cachedFundIndex = undefined;
-}
-
 // ---- Shared fetch ----
 
 async function fetchWithTimeout(url: string): Promise<Response> {
@@ -80,20 +70,51 @@ async function fetchWithTimeout(url: string): Promise<Response> {
   }
 }
 
-// ---- Stock dohod ----
-
-async function fetchDohodIndex(): Promise<DohodIndex | null> {
-  if (cachedStockIndex !== undefined) return cachedStockIndex;
+/** Parsed JSON, or null when the file is missing or the host is unreachable. */
+async function fetchJson<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetchWithTimeout(`${BASE_URL}/stocks/dohod/index.json`);
-    if (!res.ok) { cachedStockIndex = null; return null; }
-    cachedStockIndex = (await res.json()) as DohodIndex;
-    return cachedStockIndex;
+    const res = await fetchWithTimeout(url);
+    if (!res.ok) return null;
+    return (await res.json()) as T;
   } catch {
-    cachedStockIndex = null;
     return null;
   }
 }
+
+// ---- Index caches ----
+// The promise is cached, not the value: securities are synced in parallel, and they all share
+// one request for the index. A failed load stays cached too (null) until the next full sync, so
+// an unreachable GitHub costs one timeout, not one per security.
+
+let stockIndex: Promise<DohodIndex | null> | undefined;
+let fundIndex: Promise<FundIndex | null> | undefined;
+
+export function resetDohodCache(): void {
+  stockIndex = undefined;
+  fundIndex = undefined;
+}
+
+function fetchDohodIndex(): Promise<DohodIndex | null> {
+  return (stockIndex ??= fetchJson<DohodIndex>(`${BASE_URL}/stocks/dohod/index.json`));
+}
+
+function fetchFundIndex(): Promise<FundIndex | null> {
+  return (fundIndex ??= fetchJson<FundIndex>(`${BASE_URL}/funds/index.json`));
+}
+
+/**
+ * False when the index could not be loaded (offline, GitHub unreachable). Coverage is then
+ * unknown — not "this security is not covered".
+ */
+export async function isDohodIndexLoaded(): Promise<boolean> {
+  return (await fetchDohodIndex()) != null;
+}
+
+export async function isFundIndexLoaded(): Promise<boolean> {
+  return (await fetchFundIndex()) != null;
+}
+
+// ---- Stock dohod ----
 
 export async function isDohodAvailable(ticker: string): Promise<boolean> {
   const index = await fetchDohodIndex();
@@ -104,35 +125,16 @@ export async function isDohodAvailable(ticker: string): Promise<boolean> {
 export async function fetchDohodDividends(ticker: string): Promise<DohodDividendRow[] | null> {
   const available = await isDohodAvailable(ticker);
   if (!available) return null;
-  try {
-    const upperTicker = ticker.toUpperCase();
-    const res = await fetchWithTimeout(`${BASE_URL}/stocks/dohod/${upperTicker}.json`);
-    if (!res.ok) return null;
-    const data = (await res.json()) as DohodTickerData;
-    // A zero-amount forecast is dohod.ru saying "no dividend expected" — keep it
-    // (the projection uses it to stop repeating last year's payment); drop other empties.
-    return data.payments
-      .filter((p) => p.amount != null && p.recordDate && (p.amount > 0 || p.isForecast))
-      .map((p) => ({ date: new Date(p.recordDate), amount: p.amount!, isForecast: p.isForecast }));
-  } catch {
-    return null;
-  }
+  const data = await fetchJson<DohodTickerData>(`${BASE_URL}/stocks/dohod/${ticker.toUpperCase()}.json`);
+  if (!Array.isArray(data?.payments)) return null;
+  // A zero-amount forecast is dohod.ru saying "no dividend expected" — keep it
+  // (the projection uses it to stop repeating last year's payment); drop other empties.
+  return data.payments
+    .filter((p) => p.amount != null && p.recordDate && (p.amount > 0 || p.isForecast))
+    .map((p) => ({ date: new Date(p.recordDate), amount: p.amount!, isForecast: p.isForecast }));
 }
 
 // ---- Fund distributions ----
-
-async function fetchFundIndex(): Promise<FundIndex | null> {
-  if (cachedFundIndex !== undefined) return cachedFundIndex;
-  try {
-    const res = await fetchWithTimeout(`${BASE_URL}/funds/index.json`);
-    if (!res.ok) { cachedFundIndex = null; return null; }
-    cachedFundIndex = (await res.json()) as FundIndex;
-    return cachedFundIndex;
-  } catch {
-    cachedFundIndex = null;
-    return null;
-  }
-}
 
 export async function findFundKey(ticker?: string, isin?: string): Promise<string | null> {
   const index = await fetchFundIndex();
@@ -149,17 +151,12 @@ export async function findFundKey(ticker?: string, isin?: string): Promise<strin
 }
 
 export async function fetchFundDistributions(key: string): Promise<DividendHistoryRow[] | null> {
-  try {
-    const res = await fetchWithTimeout(`${BASE_URL}/funds/distributions/${key}.json`);
-    if (!res.ok) return null;
-    const data = (await res.json()) as FundDistributionData;
-    return data.distributions
-      .filter((d) => d.amountBeforeTax != null && d.amountBeforeTax > 0 && (d.recordDate || d.paymentDate))
-      .map((d) => ({
-        date: new Date((d.recordDate ?? d.paymentDate)!),
-        amount: d.amountBeforeTax,
-      }));
-  } catch {
-    return null;
-  }
+  const data = await fetchJson<FundDistributionData>(`${BASE_URL}/funds/distributions/${key}.json`);
+  if (!Array.isArray(data?.distributions)) return null;
+  return data.distributions
+    .filter((d) => d.amountBeforeTax != null && d.amountBeforeTax > 0 && (d.recordDate || d.paymentDate))
+    .map((d) => ({
+      date: new Date((d.recordDate ?? d.paymentDate)!),
+      amount: d.amountBeforeTax,
+    }));
 }

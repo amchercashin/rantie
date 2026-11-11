@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 async function skipIntro(page: import('@playwright/test').Page) {
   await page.evaluate(() => {
     localStorage.setItem('rt-welcome-done', '1');
-    localStorage.setItem('rt-splash-seen', '1');
+    localStorage.setItem('rt-splash-seen-v2', '1');
   });
 }
 
@@ -30,7 +30,7 @@ test.beforeEach(async ({ page }) => {
 
 test('first launch shows the welcome flow and the demo portfolio', async ({ page }) => {
   await page.goto('/');
-  await page.evaluate(() => localStorage.setItem('rt-splash-seen', '1'));
+  await page.evaluate(() => localStorage.setItem('rt-splash-seen-v2', '1'));
   await page.reload();
 
   const welcome = page.getByRole('dialog', { name: 'Добро пожаловать в Рантье' });
@@ -121,7 +121,7 @@ test('mobile manual flow supports foreign currency asset and payment', async ({ 
   await usdRateInput.fill('90');
   await usdRateInput.press('Enter');
   await expect(page.locator('input[value="90"]')).toBeVisible();
-  await expect(page.getByText(/обновлён/)).toBeVisible();
+  await expect(page.getByText(/^свой курс ·/)).toBeVisible();
 
   await page.goto('/data');
   await expect(page.getByRole('button', { name: /Валютный счёт/ }).first()).toContainText(nb('18 тыс ₽'));

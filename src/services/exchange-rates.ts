@@ -41,10 +41,6 @@ export function getRateToRub(
   return rates.get(normalized) ?? 0;
 }
 
-export async function getExchangeRates(): Promise<ExchangeRate[]> {
-  return db.exchangeRates.toArray();
-}
-
 export async function updateExchangeRate(currency: string, rateToRub: number): Promise<void> {
   const normalized = normalizeCurrency(currency);
   if (normalized === BASE_CURRENCY) return;
@@ -55,12 +51,6 @@ export async function updateExchangeRate(currency: string, rateToRub: number): P
     updatedAt: new Date(),
     source: 'manual',
   });
-}
-
-export async function deleteExchangeRate(currency: string): Promise<void> {
-  const normalized = normalizeCurrency(currency);
-  if (normalized === BASE_CURRENCY) return;
-  await db.exchangeRates.delete(normalized);
 }
 
 export type RatesFetcher = () => Promise<Map<string, number> | null>;

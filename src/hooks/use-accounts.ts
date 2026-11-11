@@ -6,10 +6,6 @@ export function useAccounts() {
   return useLiveQuery(() => db.accounts.toArray()) ?? [];
 }
 
-export function useAccount(id: number) {
-  return useLiveQuery(() => db.accounts.get(id), [id]);
-}
-
 export async function addAccount(name: string): Promise<number> {
   const now = new Date();
   return (await db.accounts.add({ name, createdAt: now, updatedAt: now })) as number;

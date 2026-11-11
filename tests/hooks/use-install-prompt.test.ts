@@ -1,10 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
 
 import {
   getPlatform,
   getIsStandalone,
   shouldShowButton,
   shouldAutoLaunchGuide,
+  useInstallPrompt,
 } from '@/hooks/use-install-prompt';
 
 describe('getPlatform', () => {
@@ -150,5 +152,42 @@ describe('shouldAutoLaunchGuide', () => {
       isStandalone: false,
       iosSeen: false,
     })).toBe(false);
+  });
+});
+
+describe('useInstallPrompt', () => {
+  const originalUA = navigator.userAgent;
+
+  beforeEach(() => {
+    localStorage.clear();
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36',
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'userAgent', { value: originalUA, configurable: true });
+  });
+
+  it('stays hidden until the onboarding is finished', () => {
+    const { result } = renderHook(() => useInstallPrompt());
+    expect(result.current.showButton).toBe(false);
+  });
+
+  it('offers the install after the onboarding', () => {
+    localStorage.setItem('hi-onboarding-done', '1');
+    const { result } = renderHook(() => useInstallPrompt());
+    expect(result.current.showButton).toBe(true);
+  });
+
+  it('stays hidden after a dismissal', () => {
+    localStorage.setItem('hi-onboarding-done', '1');
+    const first = renderHook(() => useInstallPrompt());
+    act(() => first.result.current.dismiss());
+    expect(first.result.current.showButton).toBe(false);
+
+    const next = renderHook(() => useInstallPrompt());
+    expect(next.result.current.showButton).toBe(false);
   });
 });

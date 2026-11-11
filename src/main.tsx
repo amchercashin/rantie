@@ -10,6 +10,8 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     for (const reg of registrations) {
       const scope = new URL(reg.scope).pathname;
+      // The app's own worker lives at BASE_URL — it stays even when the app is served from "/".
+      if (scope === import.meta.env.BASE_URL) continue;
       if (scope === '/' || scope === '/way' || scope === '/heroincome' || scope === '/heroincome/') {
         // Root-scope SW, missing trailing slash, or the pre-rename deploy path — leftovers from old deploys
         reg.unregister();
@@ -45,12 +47,16 @@ function runSplash(): void {
   }, SPLASH_DURATION_MS);
 }
 
-// Migrate old DB name before React mounts
-migrateDbName().then(() => {
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <App />
-    </StrictMode>
-  );
-  runSplash();
-});
+// Migrate old DB name before React mounts. The app starts whatever the outcome: listing the
+// databases can fail on its own (IndexedDB blocked or broken), and a blank page under the splash
+// would hide the real error from the error boundary.
+migrateDbName()
+  .catch((err) => console.error('DB name migration check failed:', err))
+  .then(() => {
+    createRoot(document.getElementById('root')!).render(
+      <StrictMode>
+        <App />
+      </StrictMode>
+    );
+    runSplash();
+  });

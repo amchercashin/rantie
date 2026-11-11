@@ -1,28 +1,14 @@
 /**
  * Persistence for one-off UI hints and the welcome flow.
- * localStorage may be unavailable (private mode) — every access is guarded.
+ * localStorage may be unavailable (private mode) — every access is guarded, and hints then
+ * simply show again next time.
  */
+import { readStorage as read, writeStorage as write } from '@/lib/safe-storage';
+
 const HINT_PREFIX = 'rt-hint-';
 export const WELCOME_DONE_KEY = 'rt-welcome-done';
 /** Key used by the previous onboarding; users who finished it skip the new welcome. */
 const LEGACY_ONBOARDING_KEY = 'hi-onboarding-done';
-
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function write(key: string, value: string | null): void {
-  try {
-    if (value == null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    /* storage unavailable — hints simply show again next time */
-  }
-}
 
 export function isHintDismissed(id: string): boolean {
   return read(HINT_PREFIX + id) != null;

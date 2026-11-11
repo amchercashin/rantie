@@ -6,23 +6,11 @@ export function useHoldings() {
   return useLiveQuery(() => db.holdings.toArray()) ?? [];
 }
 
-export function useHoldingsByAccount(accountId: number) {
-  return useLiveQuery(
-    () => db.holdings.where('accountId').equals(accountId).toArray(),
-    [accountId],
-  ) ?? [];
-}
-
 export function useHoldingsByAsset(assetId: number) {
   return useLiveQuery(
     () => db.holdings.where('assetId').equals(assetId).toArray(),
     [assetId],
   ) ?? [];
-}
-
-export function useTotalQuantity(assetId: number): number {
-  const holdings = useHoldingsByAsset(assetId);
-  return holdings.reduce((sum, h) => sum + h.quantity, 0);
 }
 
 export async function addHolding(holding: Omit<Holding, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {

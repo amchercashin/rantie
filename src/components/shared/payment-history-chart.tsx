@@ -25,6 +25,11 @@ interface YearData {
 
 const BAR_AREA = 112;
 
+/** What a year paid; a year with nothing paid yet but a forecast tells the forecast as "≈…". */
+function yearTotal(y: YearData): string {
+  return y.fact === 0 && y.forecast > 0 ? `≈${formatNumber(y.forecast)}` : formatNumber(y.fact);
+}
+
 /** Payments per unit, grouped by calendar year; forecasts drawn hatched on top. */
 export function PaymentHistoryChart({ history, currency = 'RUB', unitLabel = 'на 1 бумагу' }: PaymentHistoryChartProps) {
   const [selected, setSelected] = useState<number | null>(null);
@@ -84,7 +89,8 @@ export function PaymentHistoryChart({ history, currency = 'RUB', unitLabel = 'н
         )}
       </div>
 
-      <div ref={scrollRef} className="hi-scroll-hide mt-4 flex items-end gap-1.5 overflow-x-auto pb-1" style={{ height: BAR_AREA + 52 }}>
+      {/* -mx-1 px-1: room for the selection frame (2px gap + 2px ring) of the edge columns, which the scroller would clip. */}
+      <div ref={scrollRef} className="hi-scroll-hide -mx-1 mt-4 flex items-end gap-1.5 overflow-x-auto px-1 pb-1" style={{ height: BAR_AREA + 52 }}>
         {years.map((y, i) => {
           const isCurrent = y.year === currentYear;
           const isSelected = y.year === selected;
@@ -96,7 +102,7 @@ export function PaymentHistoryChart({ history, currency = 'RUB', unitLabel = 'н
               type="button"
               onClick={() => setSelected(isSelected ? null : y.year)}
               className="flex h-full min-w-[38px] max-w-[64px] flex-1 flex-col items-center justify-end outline-none"
-              aria-label={`${y.year}: ${formatNumber(y.fact)} ${unit}`}
+              aria-label={`${y.year}: ${yearTotal(y)} ${unit}`}
             >
               <span className={cn('mb-1 text-[10px] font-semibold', isCurrent ? 'text-[var(--hi-text-3)]' : 'text-[var(--hi-text-2)]')}>
                 {y.fact > 0
@@ -105,9 +111,17 @@ export function PaymentHistoryChart({ history, currency = 'RUB', unitLabel = 'н
                     ? `≈${formatNumber(y.forecast, y.forecast < 10 ? 2 : 0)}`
                     : '—'}
               </span>
-              <div className="flex w-full flex-col items-stretch" style={{ animation: `hi-bar-grow 0.8s var(--hi-ease-out) ${0.2 + i * 0.05}s both`, transformOrigin: 'bottom' }}>
+              {/* The selection frame wraps the whole column — forecast part included — so it keeps the rounded top. */}
+              <div
+                className={cn(
+                  'flex w-full flex-col items-stretch rounded-t-md transition-shadow',
+                  isSelected && 'ring-2 ring-[var(--hi-gold-bright)] ring-offset-2 ring-offset-[var(--hi-surface)]',
+                )}
+                style={{ animation: `hi-bar-grow 0.8s var(--hi-ease-out) ${0.2 + i * 0.05}s both`, transformOrigin: 'bottom' }}
+              >
                 {foreH > 0 && (
                   <div
+                    data-part="forecast"
                     className="w-full rounded-t-md border border-dashed border-[rgba(217,192,142,0.45)] border-b-0"
                     style={{
                       height: foreH,
@@ -116,7 +130,8 @@ export function PaymentHistoryChart({ history, currency = 'RUB', unitLabel = 'н
                   />
                 )}
                 <div
-                  className={cn('w-full transition-all', foreH > 0 ? '' : 'rounded-t-md', isSelected && 'ring-2 ring-[var(--hi-gold-bright)] ring-offset-2 ring-offset-[var(--hi-surface)]')}
+                  data-part="fact"
+                  className={cn('w-full', foreH > 0 ? '' : 'rounded-t-md')}
                   style={{
                     height: factH || 2,
                     background: y.fact > 0
@@ -144,7 +159,7 @@ export function PaymentHistoryChart({ history, currency = 'RUB', unitLabel = 'н
               {detail.year === currentYear && <span className="ml-1.5 font-medium text-[var(--hi-text-3)]">· год не завершён</span>}
             </span>
             <span className="text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-text)]">
-              {formatNumber(detail.fact)} {unit}
+              {yearTotal(detail)} {unit}
             </span>
           </div>
           <div className="mt-2 space-y-1">

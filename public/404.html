@@ -5,7 +5,7 @@
   <script>
     // SPA redirect for GitHub Pages
     // Converts the path to a query string so index.html can restore it
-    var pathSegmentsToKeep = 1; // /way/ = 1 segment
+    var pathSegmentsToKeep = 1; // the repository segment: /rantie/
     var l = window.location;
     l.replace(
       l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +

@@ -57,7 +57,7 @@ export function UpcomingPayments({ payments, assetsById, now = new Date() }: Upc
               <div className="mt-0.5 flex items-center gap-1.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
                 <span className="size-1.5 rounded-full" style={{ backgroundColor: getTypeColor(asset.type) }} />
                 <span className="truncate">
-                  {whenLabel(days)} · {p.announced ? 'объявлено' : 'ожидается'}
+                  {whenLabel(days)} · {p.basis === 'forecast' ? 'прогноз' : 'ожидается'}
                 </span>
               </div>
             </div>

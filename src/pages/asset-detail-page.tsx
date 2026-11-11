@@ -218,7 +218,7 @@ export function AssetDetailPage() {
             <div className="min-w-0 flex-1">
               <div className="text-[length:var(--hi-text-body)] font-semibold text-[var(--hi-text)]">{formatLongDate(next.date)}</div>
               <div className="mt-0.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
-                {perUnitLabel ? `${formatPrice(next.perUnit, currency)} ${perUnitLabel} · ` : ''}{next.announced ? 'объявлено' : next.estimated ? 'дата условная' : 'ожидается'}
+                {perUnitLabel ? `${formatPrice(next.perUnit, currency)} ${perUnitLabel} · ` : ''}{next.basis === 'forecast' ? 'прогноз' : next.estimated ? 'дата условная' : 'ожидается'}
               </div>
             </div>
             <div className="shrink-0 text-right">

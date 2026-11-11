@@ -11,7 +11,7 @@ import type { CalculatedAssetStats } from './portfolio-calculator';
  * (rent, deposits) spreads a payment over its own period.
  *
  * The future is built from what is known, in this order:
- *   1. announced forecasts (e.g. dohod.ru dividend forecasts, `isForecast`);
+ *   1. forecasts (`isForecast`, e.g. dohod.ru) and records already dated in the future;
  *   2. otherwise the last year repeats: each payment of the trailing 12 months
  *      recurs one year later ('year' spread) or the latest payout recurs every
  *      period ('period' spread);
@@ -29,19 +29,21 @@ export interface ProjectedPayment {
   perUnit: number;
   /** true when the date is a guess (manual income without a known schedule). */
   estimated: boolean;
-  /** true when the payment comes from an announced forecast. */
-  announced: boolean;
   /** Why this payment is expected. */
   basis: ProjectionBasis;
 }
 
 /**
- * announced — a forecast or a future-dated record (e.g. dohod.ru);
+ * forecast — someone's forecast (`isForecast`, e.g. dohod.ru). Sources don't say
+ *   whether the company has declared or approved it, so the UI calls it «прогноз»,
+ *   never «объявлено»;
+ * scheduled — a real record already dated in the future (MOEX, typed in by hand),
+ *   stage unknown too;
  * last-year — last year's payment repeated;
  * last-payout — the latest self-recorded payout repeated every period;
  * fixed — the user's own amount, spread over the frequency.
  */
-export type ProjectionBasis = 'announced' | 'last-year' | 'last-payout' | 'fixed';
+export type ProjectionBasis = 'forecast' | 'scheduled' | 'last-year' | 'last-payout' | 'fixed';
 
 export interface MonthBucket {
   /** 0–11, calendar month */
@@ -68,7 +70,6 @@ export interface ProjectionInput {
 
 interface FuturePayment extends PaymentRecord {
   estimated: boolean;
-  announced: boolean;
   basis: ProjectionBasis;
 }
 
@@ -122,26 +123,26 @@ function futurePaymentsFor(asset: Asset, history: PaymentHistory[], now: Date, h
     for (let k = 0; ; k++) {
       const date = addMonths(first, Math.round((k * 12) / frequency));
       if (date > horizon) break;
-      out.push({ amount: perUnit, date, estimated: !hasKnownDate, announced: false, basis: 'fixed' });
+      out.push({ amount: perUnit, date, estimated: !hasKnownDate, basis: 'fixed' });
     }
     return out.sort((a, b) => a.date.getTime() - b.date.getTime());
   }
 
-  // Real payments already dated in the future (rare, e.g. typed in by hand).
+  // Real payments already dated in the future (rare: MOEX, or typed in by hand).
   for (const p of real) {
-    if (p.date > now && p.date <= horizon) out.push({ ...p, estimated: false, announced: true, basis: 'announced' });
+    if (p.date > now && p.date <= horizon) out.push({ ...p, estimated: false, basis: 'scheduled' });
   }
   // A zero-amount forecast means "no payment expected": it cancels the repeated
   // payment but is not a payment itself.
-  const announcedDates: Date[] = [];
+  const knownDates: Date[] = [];
   for (const p of forecasts) {
     if (p.date <= now || p.date > horizon) continue;
-    announcedDates.push(p.date);
-    if (p.amount > 0) out.push({ ...p, estimated: false, announced: true, basis: 'announced' });
+    knownDates.push(p.date);
+    if (p.amount > 0) out.push({ ...p, estimated: false, basis: 'forecast' });
   }
-  for (const q of out) announcedDates.push(q.date);
+  for (const q of out) knownDates.push(q.date);
   const isCovered = (date: Date) =>
-    announcedDates.some((d) => Math.abs(d.getTime() - date.getTime()) <= MATCH_WINDOW_DAYS * DAY_MS);
+    knownDates.some((d) => Math.abs(d.getTime() - date.getTime()) <= MATCH_WINDOW_DAYS * DAY_MS);
 
   const past = real.filter((p) => p.date <= now);
   if (spread === 'year') {
@@ -152,7 +153,7 @@ function futurePaymentsFor(asset: Asset, history: PaymentHistory[], now: Date, h
         const date = addMonths(p.date, 12 * years);
         if (date > horizon) break;
         if (date <= now) continue;
-        if (!isCovered(date)) out.push({ amount: p.amount, date, estimated: false, announced: false, basis: 'last-year' });
+        if (!isCovered(date)) out.push({ amount: p.amount, date, estimated: false, basis: 'last-year' });
       }
     }
   } else {
@@ -166,7 +167,7 @@ function futurePaymentsFor(asset: Asset, history: PaymentHistory[], now: Date, h
         const date = addMonths(last, Math.round(k * step));
         if (date > horizon) break;
         if (date <= now) continue;
-        if (!isCovered(date)) out.push({ amount: perPayout, date, estimated: false, announced: false, basis: 'last-payout' });
+        if (!isCovered(date)) out.push({ amount: perPayout, date, estimated: false, basis: 'last-payout' });
       }
     }
   }
@@ -208,7 +209,6 @@ export function projectIncome(input: ProjectionInput): ProjectedPayment[] {
         amount: p.amount * factor,
         perUnit: p.amount,
         estimated: p.estimated,
-        announced: p.announced,
         basis: p.basis,
       });
     }

@@ -57,10 +57,10 @@ describe('projectIncome', () => {
     expect(day(projection[0].date)).toBe('2027-07-18');
     expect(projection[0].amount).toBeCloseTo(36 * 10 * 0.87);
     expect(projection[0].perUnit).toBe(36);
-    expect(projection[0]).toMatchObject({ estimated: false, announced: false, basis: 'last-year' });
+    expect(projection[0]).toMatchObject({ estimated: false, basis: 'last-year' });
   });
 
-  it('prefers an announced forecast over the repeated payment', () => {
+  it('prefers a forecast over the repeated payment', () => {
     const { projection } = run(
       [stock({ id: 1 })],
       [holding(1, 1)],
@@ -68,7 +68,25 @@ describe('projectIncome', () => {
     );
     expect(projection).toHaveLength(1);
     expect(day(projection[0].date)).toBe('2027-07-10');
-    expect(projection[0]).toMatchObject({ perUnit: 40, announced: true, basis: 'announced' });
+    expect(projection[0]).toMatchObject({ perUnit: 40, basis: 'forecast' });
+  });
+
+  it('keeps a forecast apart from a real record dated in the future', () => {
+    // Neither says the dividend is declared: dohod.ru forecasts carry no stage,
+    // and a future MOEX/hand-typed record is just a date.
+    const { projection } = run(
+      [stock({ id: 1 })],
+      [holding(1, 1)],
+      [
+        payment(1, '2026-07-18', 36),
+        payment(1, '2026-12-15', 5),
+        payment(1, '2027-07-10', 40, { isForecast: true, dataSource: 'dohod' }),
+      ],
+    );
+    expect(projection.map((p) => [day(p.date), p.basis])).toEqual([
+      ['2026-12-15', 'scheduled'],
+      ['2027-07-10', 'forecast'],
+    ]);
   });
 
   it('treats a zero-amount forecast as "no payment expected"', () => {
@@ -152,7 +170,7 @@ describe('incomeTimeline', () => {
     expect(now.value).toBe(24); // 24 ₽ × 12 шт / 12 мес
     // A year before the latest dividend only the previous one was in the pocket.
     expect(timeline.find((p) => day(p.date) === '2026-06-25')!.value).toBe(12);
-    // After the announced forecast arrives, the pocket holds 36.
+    // After the forecast payment arrives, the pocket holds 36.
     const last = timeline[36];
     expect(last.future).toBe(true);
     expect(last.value).toBe(36);

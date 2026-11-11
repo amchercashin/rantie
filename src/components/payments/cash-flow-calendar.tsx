@@ -11,7 +11,8 @@ const MONTHS_FULL = ['Январь', 'Февраль', 'Март', 'Апрель
 const BAR_H = 128;
 
 const BASIS_LABEL: Record<ProjectedPayment['basis'], string> = {
-  announced: 'объявлено',
+  forecast: 'прогноз',
+  scheduled: 'ожидается',
   'last-year': 'как год назад',
   'last-payout': 'как последняя выплата',
   fixed: 'ваша сумма',

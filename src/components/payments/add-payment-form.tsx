@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import type { PaymentHistory } from '@/models/types';
 import { parseDecimal } from '@/components/ds/field';
+import { isTouchPrimary } from '@/lib/input-device';
 
 interface AddPaymentFormProps {
   assetId: number;
@@ -43,7 +44,7 @@ export function AddPaymentForm({ assetId, paymentType, currency, onAdd, onCancel
           aria-label={`Сумма выплаты до НДФЛ, ${currency}`}
           className={INPUT}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          autoFocus
+          autoFocus={!isTouchPrimary()}
         />
         <button
           type="button"

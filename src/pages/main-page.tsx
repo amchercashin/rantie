@@ -27,6 +27,7 @@ import { InstallButton } from '@/components/install-button';
 import { upcomingPayments } from '@/services/income-projection';
 import { loadDemoPortfolio, removeDemoPortfolio } from '@/services/demo-portfolio';
 import { withViewTransition } from '@/lib/view-transition';
+import { scrollToWithPeek } from '@/lib/smooth-scroll';
 
 const PERIOD_KEY = 'rt-income-period';
 let hasVisitedMainPage = false;
@@ -51,10 +52,23 @@ export function MainPage() {
   const ndflRates = useNdflRates();
   const goal = useIncomeGoal();
   const [goalOpen, setGoalOpen] = useState(false);
+  const upcomingRef = useRef<HTMLElement>(null);
+  const structureRef = useRef<HTMLElement>(null);
+  const stopScrollRef = useRef<(() => void) | null>(null);
   // The hero promises "after tax" only when some rate is actually set for the categories held.
   const taxed = categories.some((c) => (ndflRates.get(c.type) ?? 0) > 0);
 
   useEffect(() => { hasVisitedMainPage = true; }, []);
+  useEffect(() => () => stopScrollRef.current?.(), []);
+
+  // Tap on Доходность / Капитал: scroll down to the payments and the income by category,
+  // leaving the bottom of the chart in view so it reads as the same page.
+  const showIncomeSources = () => {
+    const target = upcomingRef.current ?? structureRef.current;
+    if (!target) return;
+    stopScrollRef.current?.();
+    stopScrollRef.current = scrollToWithPeek(target);
+  };
 
   const changeMode = (next: IncomePeriod) => {
     setMode(next);
@@ -174,6 +188,7 @@ export function MainPage() {
             onModeChange={changeMode}
             animate={animate}
             taxed={taxed}
+            onStatsClick={showIncomeSources}
             footer={
               <GoalPath
                 incomePerMonth={isLoading ? null : portfolio.totalIncomePerMonth}
@@ -212,6 +227,7 @@ export function MainPage() {
 
           {upcoming.length > 0 && (
             <Section
+              ref={upcomingRef}
               title="Ближайшие выплаты"
               className="mt-8"
               action={
@@ -228,7 +244,7 @@ export function MainPage() {
             </Section>
           )}
 
-          <Section title="Откуда доход" className="mt-8">
+          <Section ref={structureRef} title="Откуда доход" className="mt-8">
             <IncomeStructure categories={categories} mode={mode} animate={animate} />
           </Section>
         </>

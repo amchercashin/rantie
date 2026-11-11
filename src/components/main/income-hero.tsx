@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useCountUp } from '@/hooks/use-count-up';
 import { TransitionLink } from '@/components/ui/transition-link';
 import { Segmented } from '@/components/ds/segmented';
-import { NBSP, formatCurrency, formatCurrencyFull, formatPercent } from '@/lib/utils';
+import { NBSP, cn, formatCurrency, formatCurrencyFull, formatPercent } from '@/lib/utils';
 
 export type IncomePeriod = 'month' | 'year';
 
@@ -20,18 +20,38 @@ interface IncomeHeroProps {
   taxed?: boolean;
   /** Lower half of the summary card — the way to the income goal. */
   footer?: ReactNode;
+  /** Tap on the Доходность / Капитал row — the main page scrolls down to where the income comes from. */
+  onStatsClick?: () => void;
 }
+
+const statsGrid = 'grid grid-cols-2 divide-x divide-[var(--hi-line)] py-3';
 
 function splitAmount(value: number | null): { digits: string; empty: boolean } {
   if (value == null) return { digits: '—', empty: true };
   return { digits: formatCurrencyFull(value).replace(`${NBSP}₽`, ''), empty: false };
 }
 
-export function IncomeHero({ income, incomePerYear, yieldPercent, totalValue, mode, onModeChange, animate = true, taxed = true, footer }: IncomeHeroProps) {
+export function IncomeHero({ income, incomePerYear, yieldPercent, totalValue, mode, onModeChange, animate = true, taxed = true, footer, onStatsClick }: IncomeHeroProps) {
   const animated = useCountUp(income, animate);
   const { digits } = splitAmount(animated);
   const perDay = incomePerYear != null && incomePerYear > 0 ? incomePerYear / 365 : null;
   const a = (css: string) => (animate ? { style: { animation: css } } : {});
+  const stats = (
+    <>
+      <div>
+        <div className="hi-eyebrow">Доходность</div>
+        <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">
+          {formatPercent(yieldPercent)}
+        </div>
+      </div>
+      <div>
+        <div className="hi-eyebrow">Капитал</div>
+        <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">
+          {formatCurrency(totalValue)}
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <section aria-label="Пассивный доход" className="relative pt-2 pb-2 text-center">
@@ -96,20 +116,18 @@ export function IncomeHero({ income, incomePerYear, yieldPercent, totalValue, mo
         className="relative mx-auto mt-6 max-w-[340px] overflow-hidden rounded-2xl border border-[var(--hi-line)] bg-[color-mix(in_srgb,var(--hi-surface)_70%,transparent)]"
         {...a('hi-fade-slide-up 0.6s var(--hi-ease-out) 0.55s both')}
       >
-        <div className="grid grid-cols-2 divide-x divide-[var(--hi-line)] py-3">
-          <div>
-            <div className="hi-eyebrow">Доходность</div>
-            <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">
-              {formatPercent(yieldPercent)}
-            </div>
-          </div>
-          <div>
-            <div className="hi-eyebrow">Капитал</div>
-            <div className="mt-1 text-[length:var(--hi-text-heading)] font-semibold text-[var(--hi-text)]">
-              {formatCurrency(totalValue)}
-            </div>
-          </div>
-        </div>
+        {onStatsClick ? (
+          <button
+            type="button"
+            onClick={onStatsClick}
+            aria-label={`Доходность ${formatPercent(yieldPercent)}, капитал ${formatCurrency(totalValue)}. Показать, откуда доход`}
+            className={cn(statsGrid, 'hi-pressable w-full outline-none active:bg-[var(--hi-raised)] focus-visible:bg-[var(--hi-raised)]')}
+          >
+            {stats}
+          </button>
+        ) : (
+          <div className={statsGrid}>{stats}</div>
+        )}
         {footer && <div className="border-t border-[var(--hi-line)]">{footer}</div>}
       </div>
     </section>

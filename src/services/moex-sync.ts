@@ -392,6 +392,16 @@ async function syncPayments(
 
 type PreferredSource = 'dohod' | 'parus';
 
+/**
+ * What a payment sync of one security came to:
+ * - loaded — a source gave payments;
+ * - no-source — every source answered and none has payments for it (not in the dohod.ru / Parus
+ *   index, or listed there with nothing, and MOEX gave nothing either). Since autumn 2026 MOEX ISS
+ *   serves no dividends at all, so this is the usual result for a security outside dohod.ru / Parus;
+ * - unreachable — a source did not answer (offline, GitHub blocked, a file failed): try later.
+ */
+export type PaymentsOutcome = 'loaded' | 'no-source' | 'unreachable';
+
 async function storedPayments(assetId: number): Promise<PaymentHistory[]> {
   return db.paymentHistory
     .where('[assetId+date]')
@@ -458,6 +468,7 @@ async function writeFromMoex(
 async function syncStockDividends(ra: ResolvedAsset): Promise<{
   dohodRows: Awaited<ReturnType<typeof fetchDohodDividends>>;
   divInfo: DividendResult | null;
+  outcome: PaymentsOutcome;
 }> {
   const ticker = ra.asset.ticker ?? ra.secid;
   const covered = await isDohodAvailable(ticker);
@@ -465,27 +476,36 @@ async function syncStockDividends(ra: ResolvedAsset): Promise<{
 
   if (dohodRows) {
     await writeFromPreferred(ra.asset.id!, dohodRows, 'dividend', 'dohod');
-    return { dohodRows, divInfo: null };
+    return { dohodRows, divInfo: null, outcome: dohodRows.length > 0 ? 'loaded' : 'no-source' };
   }
 
   const dropped = !covered && (await isDohodIndexLoaded());
-  return { dohodRows: null, divInfo: await writeFromMoex(ra, 'dividend', 'dohod', dropped) };
+  const divInfo = await writeFromMoex(ra, 'dividend', 'dohod', dropped);
+  return { dohodRows: null, divInfo, outcome: moexOutcome(divInfo, dropped) };
+}
+
+/** After the preferred source gave nothing: MOEX loaded something, or every source said no. */
+function moexOutcome(divInfo: DividendResult | null, noPreferred: boolean): PaymentsOutcome {
+  if (divInfo && divInfo.history.length > 0) return 'loaded';
+  return noPreferred ? 'no-source' : 'unreachable';
 }
 
 /** Fund distributions: heroincome-data (Parus) first, MOEX as a fallback. */
 async function syncFundDistributions(ra: ResolvedAsset): Promise<{
   fundRows: Awaited<ReturnType<typeof fetchFundDistributions>>;
+  outcome: PaymentsOutcome;
 }> {
   const fundKey = await findFundKey(ra.asset.ticker, ra.asset.isin, ra.secid);
   const fundRows = fundKey ? await fetchFundDistributions(fundKey) : null;
 
   if (fundRows && fundRows.length > 0) {
     await writeFromPreferred(ra.asset.id!, fundRows, 'distribution', 'parus');
-  } else {
-    const dropped = !fundKey && (await isFundIndexLoaded());
-    await writeFromMoex(ra, 'distribution', 'parus', dropped);
+    return { fundRows, outcome: 'loaded' };
   }
-  return { fundRows };
+  const dropped = !fundKey && (await isFundIndexLoaded());
+  const divInfo = await writeFromMoex(ra, 'distribution', 'parus', dropped);
+  // A listed fund whose file holds no payouts counts as "no source" too.
+  return { fundRows, outcome: moexOutcome(divInfo, dropped || fundRows?.length === 0) };
 }
 
 async function writePaymentHistory(
@@ -559,7 +579,15 @@ export async function deleteManualPayments(assetId: number): Promise<number> {
   return manual.length;
 }
 
-export async function syncAssetPayments(assetId: number): Promise<{ success: boolean; error?: string }> {
+/**
+ * Reloads the payments of one security. With `replaceManual` the user's own payments are
+ * removed — but only once a source has actually given payments: if nothing is found they stay.
+ * `outcome` is missing for a bond that got no coupons (MOEX does not tell "none yet" from an error).
+ */
+export async function syncAssetPayments(
+  assetId: number,
+  options?: { replaceManual?: boolean },
+): Promise<{ success: boolean; error?: string; outcome?: PaymentsOutcome }> {
   const asset = await db.assets.get(assetId);
   if (!asset || !isSyncable(asset)) return { success: false, error: 'Не синхронизируемый актив' };
 
@@ -569,21 +597,23 @@ export async function syncAssetPayments(assetId: number): Promise<{ success: boo
 
     if (ra.market === 'bonds') {
       const couponHistory = await fetchCouponHistory(ra.secid);
-      if (couponHistory.length > 0) {
-        await writePaymentHistory(ra.asset.id!, couponHistory, 'coupon');
-      }
-      return { success: true };
+      if (couponHistory.length === 0) return { success: true };
+      await writePaymentHistory(ra.asset.id!, couponHistory, 'coupon');
+      if (options?.replaceManual) await deleteManualPayments(ra.asset.id!);
+      return { success: true, outcome: 'loaded' };
     }
 
-    if (ra.asset.type === 'Фонды') await syncFundDistributions(ra);
-    else await syncStockDividends(ra);
+    const { outcome } = ra.asset.type === 'Фонды'
+      ? await syncFundDistributions(ra)
+      : await syncStockDividends(ra);
+    if (options?.replaceManual && outcome === 'loaded') await deleteManualPayments(ra.asset.id!);
 
     const activeDates = await storedPaymentDates(ra.asset.id!);
     if (activeDates.length >= 2) {
       await updateMoexAssetFields(ra.asset, { frequencyPerYear: calcDividendFrequency(activeDates) });
     }
 
-    return { success: true };
+    return { success: true, outcome };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
   }

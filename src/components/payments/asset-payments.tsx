@@ -9,7 +9,8 @@ import { PaymentRow } from './payment-row';
 import { AddPaymentForm } from './add-payment-form';
 import { deletePayment, addPayment } from '@/hooks/use-payment-history';
 import { updateAsset } from '@/hooks/use-assets';
-import { isSyncable, syncAssetPayments, deleteManualPayments } from '@/services/moex-sync';
+import { isSyncable, syncAssetPayments } from '@/services/moex-sync';
+import { assetSyncMessage } from '@/lib/payment-sync-message';
 import { cn, plural } from '@/lib/utils';
 
 const PAYMENT_TYPE_MAP: Record<string, PaymentHistory['type']> = {
@@ -57,23 +58,22 @@ export function AssetPayments({ asset, payments, isHighlighted }: AssetPaymentsP
     if (syncing) return;
     if (manualCount > 0) {
       const ok = await confirm({
-        title: 'Загрузить выплаты с биржи?',
-        description: `Ручные выплаты (${manualCount}) будут заменены данными Мосбиржи и dohod.ru.`,
+        title: 'Загрузить выплаты заново?',
+        description: `Ручные выплаты (${manualCount}) заменятся загруженными. Если источники ничего не найдут, ручные останутся.`,
         confirmLabel: 'Загрузить',
       });
       if (!ok) return;
-      await deleteManualPayments(asset.id!);
     }
     setSyncing(true);
     setSyncFailed(false);
     try {
-      const result = await syncAssetPayments(asset.id!);
-      if (!result.success) {
-        setSyncFailed(true);
-        toast(`${asset.ticker ?? asset.name}: не удалось загрузить выплаты`, 'error');
-      } else {
-        toast(`${asset.ticker ?? asset.name}: выплаты обновлены`);
-      }
+      const result = await syncAssetPayments(asset.id!, { replaceManual: manualCount > 0 });
+      if (!result.success) setSyncFailed(true);
+      const message = assetSyncMessage(asset.ticker ?? asset.name, result, {
+        hadManual: manualCount > 0,
+        hadPayments: payments.length > 0,
+      });
+      toast(message.text, message.tone);
     } catch {
       setSyncFailed(true);
     } finally {
@@ -173,7 +173,11 @@ export function AssetPayments({ asset, payments, isHighlighted }: AssetPaymentsP
           ) : (
             !addFormOpen && (
               <div className="px-4 py-3 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
-                Выплат пока нет. {syncable ? 'Загрузите их с биржи или добавьте вручную.' : 'Добавьте поступление кнопкой «+».'}
+                Выплат пока нет. {!syncable
+                  ? 'Добавьте поступление кнопкой «+».'
+                  : paymentType === 'coupon'
+                    ? 'Загрузите их с биржи или добавьте вручную.'
+                    : `Кнопка ⟳ загрузит их, если ${paymentType === 'distribution' ? 'фонд' : 'бумага'} есть в открытых источниках (${paymentType === 'distribution' ? 'фонды «Паруса»' : 'dohod.ru'}). Если нет — добавьте выплаты вручную кнопкой «+».`}
               </div>
             )
           )}

@@ -14,7 +14,7 @@ npm run test:e2e   # Playwright smoke tests (set PW_CHROMIUM=/path/to/chromium t
 
 ## Architecture
 
-**Рантье** (repo/deploy name `rantie`, formerly `heroincome`) — local-first PWA for tracking passive income from stocks, bonds, deposits, real estate, and funds. No backend — all data stored in IndexedDB via Dexie. External reads: MOEX ISS API for prices/dividends, heroincome-data repo (dohod.ru) for stock dividends with priority over MOEX.
+**Рантье** (repo/deploy name `rantie`, formerly `heroincome`) — local-first PWA for tracking passive income from stocks, bonds, deposits, real estate, and funds. No backend — all data stored in IndexedDB via Dexie. External reads: MOEX ISS API for prices, bond coupons and exchange rates; heroincome-data repo for payouts — dohod.ru stock dividends and Parus fund distributions. MOEX ISS stopped serving dividends in autumn 2026 (`/securities/{secid}/dividends.json` answers like an unknown path; dividends moved to the subscribers-only `/iss/cci/corp-actions/dividends`), so `fetchDividends` stays only as a fallback that returns null — a stock or fund outside dohod.ru / Parus has no payout source and gets its payments typed in by hand.
 
 **Stack:** React 19 + React Router v7 (SPA) + Dexie (IndexedDB) + Tailwind v4 + Radix Dialog (bottom sheets) + vite-plugin-pwa + Vitest
 
@@ -69,6 +69,7 @@ Dividend/distribution history uses source priority: `dohod > moex` for stocks an
 - `isForecast` flag on `PaymentHistory` marks predicted payments (shown on chart, excluded from income calculations)
 - **One source per security at a time** (`moex-sync.ts`, "Payment sources"): rows of dohod/Parus and MOEX stored side by side would count every payment twice. When the preferred source is merely unreachable (`isDohodIndexLoaded()` / `isFundIndexLoaded()` false — offline, GitHub blocked — or one file failed to load) and its rows are already stored, they stay and MOEX is not asked. When it no longer lists the security, MOEX takes over and the old rows are deleted only once MOEX has answered. A security with nothing stored falls back to MOEX as before.
 - Bonds use moex only (no dohod coverage)
+- `syncAssetPayments(id, { replaceManual })` returns an `outcome`: `loaded` / `no-source` (every source answered, none has payouts — the usual case outside dohod.ru / Parus) / `unreachable` (try later); bonds without coupons return none. Manual payments are replaced only when a source actually returned rows — on `no-source` / `unreachable` they stay. Toast wording comes from `src/lib/payment-sync-message.ts` and says "нет в открытых источниках", never blames MOEX, so it stays true if MOEX comes back.
 
 ### NDFL tax
 

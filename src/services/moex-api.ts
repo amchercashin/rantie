@@ -387,6 +387,13 @@ export async function fetchBondData(
   };
 }
 
+/**
+ * Dividend history from MOEX ISS — kept only as the last fallback.
+ * Since autumn 2026 (seen 2026-09 … 2026-11) `/securities/{secid}/dividends.json` answers like an
+ * unknown path (`description` + `boards`, no `dividends` block), and dividends moved to
+ * `/iss/cci/corp-actions/dividends`, which is for paid subscribers only. So this returns null
+ * for everything; it is left in place to pick the data up again if the free route comes back.
+ */
 export async function fetchDividends(
   secid: string,
 ): Promise<DividendResult | null> {

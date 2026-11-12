@@ -151,6 +151,35 @@ describe('projectIncome', () => {
     expect(projection[0].basis).toBe('last-payout');
   });
 
+  it('fills the months a young fund has not paid yet with its average payout', () => {
+    // Pays monthly since April 2026: five payouts by 25 Sep, so only five can be repeated a year later.
+    const fund = stock({ id: 1, type: 'Фонды', ticker: undefined, isin: 'RU000A10BBS6', frequencyPerYear: 12 });
+    const history = ['2026-04-30', '2026-05-29', '2026-06-30', '2026-07-31', '2026-08-31'].map((d) => payment(1, d, 9.38, { type: 'distribution' }));
+    const { projection, snapshot, timeline } = run([fund], [holding(1, 147)], history, new Map([['Фонды', 13]]));
+
+    expect(projection.map((p) => [day(p.date), p.basis])).toEqual([
+      ['2026-09-30', 'average'],
+      ['2026-10-31', 'average'],
+      ['2026-11-30', 'average'],
+      ['2026-12-31', 'average'],
+      ['2027-01-31', 'average'],
+      ['2027-02-28', 'average'],
+      ['2027-03-31', 'average'],
+      ['2027-04-30', 'last-year'],
+      ['2027-05-29', 'last-year'],
+      ['2027-06-30', 'last-year'],
+      ['2027-07-31', 'last-year'],
+      ['2027-08-31', 'last-year'],
+    ]);
+    expect(projection[0].amount).toBeCloseTo(9.38 * 147 * 0.87);
+    const total = projection.reduce((sum, p) => sum + p.amount, 0);
+    expect(total).toBeCloseTo(snapshot.portfolio.totalIncomePerYear, 6);
+    expect(snapshot.portfolio.totalIncomePerMonth).toBeCloseTo(9.38 * 147 * 0.87);
+    // The chart agrees with the hero today and stays flat into the future.
+    expect(timeline[24].value).toBeCloseTo(snapshot.portfolio.totalIncomePerMonth);
+    expect(timeline[36].value).toBeCloseTo(snapshot.portfolio.totalIncomePerMonth);
+  });
+
   it('skips assets without holdings', () => {
     const { projection } = run([stock({ id: 1 }), stock({ id: 2 })], [holding(1, 0)], [payment(1, '2026-07-18', 36)]);
     expect(projection).toEqual([]);

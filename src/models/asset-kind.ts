@@ -6,7 +6,8 @@ export const EXCHANGE_TYPES = ['Акции', 'Облигации', 'Фонды']
 /**
  * Exchange-traded security with a known identifier. Its payment history is the
  * security's own history (not the user's receipts), so the trailing 12-month
- * window is always complete.
+ * window is complete — unless the security started paying less than a year ago
+ * (see annualizeShortHistory).
  */
 export function isExchangeTraded(asset: Pick<Asset, 'type' | 'ticker' | 'isin' | 'moexSecid'>): boolean {
   return !!(asset.ticker || asset.isin || asset.moexSecid)

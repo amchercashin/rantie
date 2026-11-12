@@ -52,7 +52,8 @@ export function AssetPayments({ asset, payments, isHighlighted }: AssetPaymentsP
       ? null
       : manualCount > 0
         ? 'manual'
-        : (payments[0].dataSource as SourceKind);
+        : // The stock's source is the one of its payments: under dohod.ru, smart-lab may add forecasts.
+          ((payments.find((p) => !p.isForecast) ?? payments[0]).dataSource as SourceKind);
 
   const handleSync = async () => {
     if (syncing) return;
@@ -177,7 +178,7 @@ export function AssetPayments({ asset, payments, isHighlighted }: AssetPaymentsP
                   ? 'Добавьте поступление кнопкой «+».'
                   : paymentType === 'coupon'
                     ? 'Загрузите их с биржи или добавьте вручную.'
-                    : `Кнопка ⟳ загрузит их, если ${paymentType === 'distribution' ? 'фонд' : 'бумага'} есть в открытых источниках (${paymentType === 'distribution' ? 'фонды «Паруса»' : 'dohod.ru'}). Если нет — добавьте выплаты вручную кнопкой «+».`}
+                    : `Кнопка ⟳ загрузит их, если ${paymentType === 'distribution' ? 'фонд' : 'бумага'} есть в открытых источниках (${paymentType === 'distribution' ? 'фонды «Паруса»' : 'dohod.ru, smart-lab'}). Если нет — добавьте выплаты вручную кнопкой «+».`}
               </div>
             )
           )}

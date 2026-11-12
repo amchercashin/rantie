@@ -3,7 +3,7 @@ import type { SyncResult } from '@/services/moex-sync';
 import { getLastSyncAt, getLastPriceSyncAt } from '@/services/sync-state';
 
 /**
- * The sync itself (MOEX, dohod.ru, rates) is loaded when it is first needed, not with the app:
+ * The sync itself (MOEX, dohod.ru, smart-lab, rates) is loaded when it is first needed, not with the app:
  * most starts find fresh prices and never run it.
  */
 const loadSync = () => import('@/services/moex-sync');

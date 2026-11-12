@@ -76,7 +76,7 @@ export function PaymentsPage() {
             <div key="calendar" className="animate-[hi-fade-slide-up_0.4s_var(--hi-ease-out)_both]">
               <CashFlowCalendar buckets={buckets} assetsById={assetsById} />
               <p className="mt-4 px-1 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
-                {taxed ? 'Суммы после НДФЛ' : 'Суммы до НДФЛ (ставка 0% в настройках)'} для текущего количества бумаг. Подпись у выплаты говорит, откуда сумма: прогноз dohod.ru, как год назад, средняя выплата, как последняя выплата или ваша сумма.{' '}
+                {taxed ? 'Суммы после НДФЛ' : 'Суммы до НДФЛ (ставка 0% в настройках)'} для текущего количества бумаг. Подпись у выплаты говорит, откуда сумма: рекомендовано советом директоров, прогноз, как год назад, средняя выплата, как последняя выплата или ваша сумма.{' '}
                 <TransitionLink to={guidePath('calendar')} className="font-semibold text-[var(--hi-gold)]">
                   Как читать календарь
                 </TransitionLink>

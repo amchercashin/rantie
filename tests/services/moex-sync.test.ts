@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import Dexie, { liveQuery } from 'dexie';
 import { db } from '@/db/database';
@@ -6,6 +6,9 @@ import { db } from '@/db/database';
 vi.mock('@/services/heroincome-data', () => ({
   isDohodAvailable: vi.fn().mockResolvedValue(false),
   fetchDohodDividends: vi.fn().mockResolvedValue(null),
+  isSmartlabAvailable: vi.fn().mockResolvedValue(false),
+  fetchSmartlabDividends: vi.fn().mockResolvedValue(null),
+  isSmartlabIndexLoaded: vi.fn().mockResolvedValue(true),
   resetDohodCache: vi.fn(),
   findFundKey: vi.fn().mockResolvedValue(null),
   fetchFundDistributions: vi.fn().mockResolvedValue(null),
@@ -43,6 +46,7 @@ import {
 import {
   isDohodAvailable, fetchDohodDividends, findFundKey, fetchFundDistributions,
   isDohodIndexLoaded, isFundIndexLoaded,
+  isSmartlabAvailable, fetchSmartlabDividends, isSmartlabIndexLoaded,
 } from '@/services/heroincome-data';
 import { syncAllAssets, syncAssetPayments } from '@/services/moex-sync';
 import { getLastSyncAt, getLastPriceSyncAt } from '@/services/sync-state';
@@ -1226,5 +1230,170 @@ describe('payments on one record date', () => {
     await syncAllAssets();
 
     expect((await db.assets.get(assetId))?.frequencyPerYear).toBe(2);
+  });
+});
+
+describe('smart-lab after dohod.ru', () => {
+  const STOCK = (ticker: string) => ({
+    type: 'Акции', name: ticker, ticker, moexSecid: ticker,
+    moexBoardId: 'TQBR', moexMarket: 'shares' as const,
+    dataSource: 'moex' as const, createdAt: new Date(), updatedAt: new Date(),
+    ...ASSET_DEFAULTS, frequencySource: 'moex' as const,
+  });
+  const rowsOf = async (assetId: number) =>
+    (await db.paymentHistory.where('assetId').equals(assetId).toArray())
+      .sort((a, b) => a.date.getTime() - b.date.getTime() || a.amount - b.amount)
+      .map((r) => ({
+        date: r.date.toISOString().slice(0, 10), amount: r.amount, src: r.dataSource,
+        ...(r.isForecast ? { fc: true } : {}), ...(r.recommended ? { rec: true } : {}),
+      }));
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-12T12:00:00Z'));
+    await db.delete();
+    await db.open();
+    (isDohodAvailable as Mock).mockResolvedValue(false);
+    (fetchDohodDividends as Mock).mockResolvedValue(null);
+    (isDohodIndexLoaded as Mock).mockResolvedValue(true);
+    (isSmartlabAvailable as Mock).mockResolvedValue(false);
+    (fetchSmartlabDividends as Mock).mockResolvedValue(null);
+    (isSmartlabIndexLoaded as Mock).mockResolvedValue(true);
+    (fetchDividends as Mock).mockResolvedValue(null);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('keeps dohod.ru as the source and marks its forecast recommended', async () => {
+    const assetId = (await db.assets.add(STOCK('LKOH'))) as number;
+    (isDohodAvailable as Mock).mockResolvedValue(true);
+    (fetchDohodDividends as Mock).mockResolvedValue([
+      { date: new Date('2026-05-04'), amount: 278, isForecast: false },
+      { date: new Date('2026-12-09'), amount: 535, isForecast: true },
+    ]);
+    (isSmartlabAvailable as Mock).mockResolvedValue(true);
+    (fetchSmartlabDividends as Mock).mockResolvedValue([
+      { date: new Date('2026-12-09'), amount: 535, status: 'recommended' },
+      { date: new Date('2026-05-04'), amount: 278, status: 'paid' },
+    ]);
+
+    const result = await syncAssetPayments(assetId);
+
+    expect(result.outcome).toBe('loaded');
+    expect(await rowsOf(assetId)).toEqual([
+      { date: '2026-05-04', amount: 278, src: 'dohod' },
+      { date: '2026-12-09', amount: 535, src: 'dohod', fc: true, rec: true },
+    ]);
+  });
+
+  it('replaces a forecast that differs from the recommendation with smart-lab rows', async () => {
+    const assetId = (await db.assets.add(STOCK('BTBR'))) as number;
+    (isDohodAvailable as Mock).mockResolvedValue(true);
+    (fetchDohodDividends as Mock).mockResolvedValue([
+      { date: new Date('2026-10-11'), amount: 4.61, isForecast: false },
+      { date: new Date('2026-12-21'), amount: 9.8, isForecast: true },
+    ]);
+    (isSmartlabAvailable as Mock).mockResolvedValue(true);
+    (fetchSmartlabDividends as Mock).mockResolvedValue([
+      { date: new Date('2026-12-21'), amount: 5.59, status: 'recommended' },
+      { date: new Date('2026-12-21'), amount: 4.21, status: 'recommended' },
+    ]);
+
+    await syncAssetPayments(assetId);
+
+    expect(await rowsOf(assetId)).toEqual([
+      { date: '2026-10-11', amount: 4.61, src: 'dohod' },
+      { date: '2026-12-21', amount: 4.21, src: 'smartlab', fc: true, rec: true },
+      { date: '2026-12-21', amount: 5.59, src: 'smartlab', fc: true, rec: true },
+    ]);
+  });
+
+  it('takes a stock dohod.ru does not list from smart-lab, with its income and frequency', async () => {
+    const assetId = (await db.assets.add(STOCK('LPSB'))) as number;
+    (isSmartlabAvailable as Mock).mockResolvedValue(true);
+    (fetchSmartlabDividends as Mock).mockResolvedValue([
+      { date: new Date('2026-12-15'), amount: 15.11, status: 'recommended' },
+      { date: new Date('2026-06-15'), amount: 14, status: 'paid' },
+      { date: new Date('2025-12-15'), amount: 13, status: 'paid' },
+      { date: new Date('2025-07-05'), amount: 9, status: 'canceled' },
+    ]);
+    await db.paymentHistory.add({ assetId, amount: 99, date: new Date('2026-01-01'), type: 'dividend', dataSource: 'manual' });
+
+    const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+    expect(result.outcome).toBe('loaded');
+    expect(await rowsOf(assetId)).toEqual([
+      { date: '2025-12-15', amount: 13, src: 'smartlab' },
+      { date: '2026-06-15', amount: 14, src: 'smartlab' },
+      { date: '2026-12-15', amount: 15.11, src: 'smartlab', fc: true, rec: true },
+    ]);
+    expect((await db.assets.get(assetId))?.frequencyPerYear).toBe(2);
+  });
+
+  it('a stock that moves to dohod.ru loses smart-lab payments, so nothing counts twice', async () => {
+    const assetId = (await db.assets.add(STOCK('SAGO'))) as number;
+    await db.paymentHistory.bulkAdd([
+      { assetId, amount: 0.4, date: new Date('2026-06-01'), type: 'dividend', dataSource: 'smartlab' },
+      { assetId, amount: 0.42, date: new Date('2026-11-30'), type: 'dividend', dataSource: 'smartlab', isForecast: true, recommended: true },
+    ]);
+    (isDohodAvailable as Mock).mockResolvedValue(true);
+    (fetchDohodDividends as Mock).mockResolvedValue([{ date: new Date('2026-06-01'), amount: 0.4, isForecast: false }]);
+    (isSmartlabAvailable as Mock).mockResolvedValue(true);
+    (fetchSmartlabDividends as Mock).mockResolvedValue([
+      { date: new Date('2026-06-01'), amount: 0.4, status: 'paid' },
+      { date: new Date('2026-11-30'), amount: 0.42, status: 'recommended' },
+    ]);
+
+    await syncAssetPayments(assetId);
+
+    expect(await rowsOf(assetId)).toEqual([
+      { date: '2026-06-01', amount: 0.4, src: 'dohod' },
+      { date: '2026-11-30', amount: 0.42, src: 'smartlab', fc: true, rec: true },
+    ]);
+  });
+
+  it('dohod.ru merely unreachable: its stored rows stay and smart-lab is not used', async () => {
+    const assetId = (await db.assets.add(STOCK('MTSS'))) as number;
+    await db.paymentHistory.add({ assetId, amount: 35, date: new Date('2026-07-09'), type: 'dividend', dataSource: 'dohod' });
+    (isDohodIndexLoaded as Mock).mockResolvedValue(false);
+    (isSmartlabAvailable as Mock).mockResolvedValue(true);
+    (fetchSmartlabDividends as Mock).mockResolvedValue([{ date: new Date('2026-07-09'), amount: 35, status: 'paid' }]);
+
+    const result = await syncAssetPayments(assetId);
+
+    expect(result.outcome).toBe('unreachable');
+    expect(await rowsOf(assetId)).toEqual([{ date: '2026-07-09', amount: 35, src: 'dohod' }]);
+  });
+
+  it('dohod.ru stopped listing the stock: smart-lab takes over and dohod.ru rows go', async () => {
+    const assetId = (await db.assets.add(STOCK('MRSB'))) as number;
+    await db.paymentHistory.add({ assetId, amount: 0.1, date: new Date('2025-07-01'), type: 'dividend', dataSource: 'dohod' });
+    (isSmartlabAvailable as Mock).mockResolvedValue(true);
+    (fetchSmartlabDividends as Mock).mockResolvedValue([{ date: new Date('2025-07-01'), amount: 0.11, status: 'paid' }]);
+
+    await syncAssetPayments(assetId);
+
+    expect(await rowsOf(assetId)).toEqual([{ date: '2025-07-01', amount: 0.11, src: 'smartlab' }]);
+  });
+
+  it('smart-lab merely unreachable: its stored rows stay', async () => {
+    const assetId = (await db.assets.add(STOCK('USBN'))) as number;
+    await db.paymentHistory.add({ assetId, amount: 0.03, date: new Date('2026-06-01'), type: 'dividend', dataSource: 'smartlab' });
+    (isSmartlabIndexLoaded as Mock).mockResolvedValue(false);
+
+    const result = await syncAssetPayments(assetId);
+
+    expect(result.outcome).toBe('unreachable');
+    expect(await rowsOf(assetId)).toEqual([{ date: '2026-06-01', amount: 0.03, src: 'smartlab' }]);
+  });
+
+  it('in neither dohod.ru nor smart-lab: no source, manual payments stay', async () => {
+    const assetId = (await db.assets.add(STOCK('ABCD'))) as number;
+    await db.paymentHistory.add({ assetId, amount: 5, date: new Date('2026-06-01'), type: 'dividend', dataSource: 'manual' });
+
+    const result = await syncAssetPayments(assetId, { replaceManual: true });
+
+    expect(result.outcome).toBe('no-source');
+    expect(await rowsOf(assetId)).toEqual([{ date: '2026-06-01', amount: 5, src: 'manual' }]);
   });
 });

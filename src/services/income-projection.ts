@@ -36,9 +36,11 @@ export interface ProjectedPayment {
 }
 
 /**
- * forecast — someone's forecast (`isForecast`, e.g. dohod.ru). Sources don't say
- *   whether the company has declared or approved it, so the UI calls it «прогноз»,
- *   never «объявлено»;
+ * forecast — someone's forecast (`isForecast`: dohod.ru, smart-lab) that the board has not
+ *   recommended as far as smart-lab knows: «прогноз»;
+ * recommended — a forecast the board of directors has already recommended (`recommended`,
+ *   from smart-lab): «рекомендовано». Whether the AGM approved it no source says, so the UI
+ *   never writes «утверждено» or «объявлено»;
  * scheduled — a real record already dated in the future (MOEX, typed in by hand),
  *   stage unknown too;
  * last-year — last year's payment repeated;
@@ -47,7 +49,7 @@ export interface ProjectedPayment {
  * last-payout — the latest self-recorded payout repeated every period;
  * fixed — the user's own amount, spread over the frequency.
  */
-export type ProjectionBasis = 'forecast' | 'scheduled' | 'last-year' | 'average' | 'last-payout' | 'fixed';
+export type ProjectionBasis = 'forecast' | 'recommended' | 'scheduled' | 'last-year' | 'average' | 'last-payout' | 'fixed';
 
 export interface MonthBucket {
   /** 0–11, calendar month */
@@ -100,10 +102,11 @@ function monthsAgo(now: Date, months: number): Date {
 
 function splitHistory(history: PaymentHistory[]) {
   const real: PaymentRecord[] = [];
-  const forecasts: PaymentRecord[] = [];
+  const forecasts: (PaymentRecord & { recommended?: boolean })[] = [];
   for (const p of history) {
-    const rec = { amount: p.amount, date: new Date(p.date) };
-    (p.isForecast ? forecasts : real).push(rec);
+    const date = new Date(p.date);
+    if (p.isForecast) forecasts.push({ amount: p.amount, date, ...(p.recommended ? { recommended: true } : {}) });
+    else real.push({ amount: p.amount, date });
   }
   real.sort((a, b) => a.date.getTime() - b.date.getTime());
   forecasts.sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -142,7 +145,7 @@ function futurePaymentsFor(asset: Asset, history: PaymentHistory[], now: Date, h
   for (const p of forecasts) {
     if (p.date <= now || p.date > horizon) continue;
     knownDates.push(p.date);
-    if (p.amount > 0) out.push({ ...p, estimated: false, basis: 'forecast' });
+    if (p.amount > 0) out.push({ amount: p.amount, date: p.date, estimated: false, basis: p.recommended ? 'recommended' : 'forecast' });
   }
   for (const q of out) knownDates.push(q.date);
   const isCovered = (date: Date) =>

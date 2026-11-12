@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Bot, Globe, Lock } from 'lucide-react';
 import { Card, Section } from '@/components/ds/surface';
+import { InfoLink } from '@/components/ds/info-link';
 
 function Point({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
@@ -23,13 +24,13 @@ function Point({ icon, title, children }: { icon: ReactNode; title: string; chil
  */
 export function PrivacyCard() {
   return (
-    <Section title="Кто видит ваш портфель">
+    <Section title="Кто видит ваш портфель" action={<InfoLink section="storage" className="-my-2 -mr-1 flex" />}>
       <Card className="overflow-hidden">
         <Point icon={<Lock />} title="Только вы">
           У Рантье нет сервера и регистрации. Счета, количество бумаг и суммы хранятся в браузере на этом устройстве и никуда не отправляются.
         </Point>
         <Point icon={<Globe />} title="В сеть уходят только тикеры">
-          Чтобы узнать цены и дивиденды, приложение спрашивает Мосбиржу и открытые файлы dohod.ru на GitHub — по тикеру, без количества и сумм.
+          Чтобы узнать цены и выплаты, приложение спрашивает Мосбиржу и открытые файлы с данными dohod.ru и «Паруса» на GitHub — по тикеру, без количества и сумм.
         </Point>
         <Point icon={<Bot />} title="Импорт через ИИ — по вашему выбору">
           Если отправите отчёт брокера ChatGPT или Claude, его увидит этот сервис. Импорт отчёта Сбера и ручной ввод работают без посредников.

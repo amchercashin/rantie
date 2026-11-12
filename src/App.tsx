@@ -11,6 +11,7 @@ const AssetDetailPage = lazy(() => import('@/pages/asset-detail-page').then((m) 
 const DataPage = lazy(() => import('@/pages/data-page').then((m) => ({ default: m.DataPage })));
 const SettingsPage = lazy(() => import('@/pages/settings-page').then((m) => ({ default: m.SettingsPage })));
 const PaymentsPage = lazy(() => import('@/pages/payments-page').then((m) => ({ default: m.PaymentsPage })));
+const GuidePage = lazy(() => import('@/pages/guide-page').then((m) => ({ default: m.GuidePage })));
 const Welcome = lazy(() => import('@/components/onboarding/welcome').then((m) => ({ default: m.Welcome })));
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
                 <Route path="/data" element={<DataPage />} />
                 <Route path="/payments" element={<PaymentsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings/guide" element={<GuidePage />} />
                 <Route path="*" element={<MainPage />} />
               </Routes>
               <Welcome />

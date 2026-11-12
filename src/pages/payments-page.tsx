@@ -7,6 +7,9 @@ import { CashFlowCalendar } from '@/components/payments/cash-flow-calendar';
 import { Segmented } from '@/components/ds/segmented';
 import { EmptyState } from '@/components/ds/surface';
 import { Hint } from '@/components/ds/hint';
+import { SyncGlyph } from '@/components/ds/sync-glyph';
+import { TransitionLink } from '@/components/ui/transition-link';
+import { guidePath } from '@/lib/guide';
 import { useAllPaymentHistory } from '@/hooks/use-payment-history';
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
@@ -73,14 +76,17 @@ export function PaymentsPage() {
             <div key="calendar" className="animate-[hi-fade-slide-up_0.4s_var(--hi-ease-out)_both]">
               <CashFlowCalendar buckets={buckets} assetsById={assetsById} />
               <p className="mt-4 px-1 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
-                {taxed ? 'Суммы после НДФЛ' : 'Суммы до НДФЛ (ставка не задана в настройках)'} для текущего количества бумаг. Дивиденды — по прогнозам dohod.ru, иначе как год назад, а у бумаг, что платят меньше года, — по средней выплате; аренда и вклады — как последняя выплата или ваша сумма.
+                {taxed ? 'Суммы после НДФЛ' : 'Суммы до НДФЛ (ставка 0% в настройках)'} для текущего количества бумаг. Подпись у выплаты говорит, откуда сумма: прогноз dohod.ru, как год назад, средняя выплата, как последняя выплата или ваша сумма.{' '}
+                <TransitionLink to={guidePath('calendar')} className="font-semibold text-[var(--hi-gold)]">
+                  Как читать календарь
+                </TransitionLink>
               </p>
             </div>
           ) : (
             <div key="history" className="space-y-3 animate-[hi-fade-slide-up_0.4s_var(--hi-ease-out)_both]">
-              <Hint id="payments-history">
-                Суммы — на одну бумагу, до налога. Биржевые выплаты загружаются сами (⟳), поступления по аренде и вкладам
-                добавляйте кнопкой «+».
+              <Hint id="payments-history" more="sources">
+                Суммы — до налога, на одну бумагу (у аренды и вклада — целиком). <SyncGlyph /> загружает выплаты бумаги из
+                открытых источников, «+» добавляет выплату вручную — для аренды, вкладов и бумаг, которых нет в источниках.
               </Hint>
               {Array.from(typeGroups.entries()).map(([type, groupAssets]) => (
                 <TypeSection

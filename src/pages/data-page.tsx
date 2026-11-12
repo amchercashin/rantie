@@ -85,8 +85,9 @@ export function DataPage() {
         </EmptyState>
       ) : (
         <div className="space-y-3">
-          <Hint id="data-accounts">
-            Нажмите на позицию, чтобы изменить количество, цену или категорию. Повторный импорт отчёта обновит количество.
+          <Hint id="data-accounts" more="import">
+            Нажмите на позицию, чтобы изменить количество, цену или категорию. Свежий отчёт, импортированный в счёт, обновит
+            количество и уберёт проданные бумаги.
           </Hint>
           {accounts.map((account, i) => (
             <div key={account.id} style={{ animation: `hi-fade-slide-up 0.5s var(--hi-ease-out) ${0.05 * i}s both` }}>

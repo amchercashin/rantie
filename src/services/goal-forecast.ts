@@ -48,6 +48,22 @@ export function incomePath(input: ForecastInput & { months: number }): number[] 
   return path;
 }
 
+/**
+ * Capital for month 0 (today) … `months`, in today's money: today's value, plus every payout
+ * reinvested, plus the top-ups. Prices are assumed to move only with inflation, so nothing else adds.
+ * Same steps as `incomePath`: the payout of month n−1 and the top-ups of month n are bought in month n.
+ */
+export function capitalPath(input: ForecastInput & { capital: number; months: number }): number[] {
+  const income = incomePath(input);
+  const monthly = positive(input.monthly);
+  const yearly = positive(input.yearly);
+  const path = [Math.max(0, input.capital)];
+  for (let n = 1; n < income.length; n++) {
+    path.push(path[n - 1] + income[n - 1] + monthly + (n % 12 === 0 ? yearly : 0));
+  }
+  return path;
+}
+
 /** First month the income reaches the goal: 0 when it already does, null when not within fifty years. */
 export function monthsToGoal(input: ForecastInput & { goalPerMonth: number }): number | null {
   if (!(input.goalPerMonth > 0)) return null;

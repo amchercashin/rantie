@@ -39,6 +39,18 @@ describe('GoalAnswer', () => {
     expect(screen.getByText(/больше чем через 50 лет/)).toBeInTheDocument();
   });
 
+  it('promises nothing while the portfolio pays nothing and nothing is put in', () => {
+    render(<GoalAnswer {...demo} incomePerMonth={0} goalPerMonth={100_000} />);
+    expect(screen.getByText(/Пока портфель ничего не приносит/)).toBeInTheDocument();
+    expect(screen.queryByTestId('goal-year')).toBeNull();
+  });
+
+  it('counts on top-ups alone when the portfolio pays nothing yet', () => {
+    render(<GoalAnswer {...demo} incomePerMonth={0} goalPerMonth={30_000} monthly={50_000} />);
+    expect(screen.getByTestId('goal-year')).toHaveTextContent(/^в 20\d\d году$/);
+    expect(screen.getByText('Без пополнений доход не появится: портфель пока ничего не приносит.')).toBeInTheDocument();
+  });
+
   it('asks for a positive yield instead of promising anything', () => {
     render(<GoalAnswer {...demo} yieldPercent={0} goalPerMonth={100_000} monthly={50_000} />);
     expect(screen.getByText(/Укажите доходность больше нуля/)).toBeInTheDocument();

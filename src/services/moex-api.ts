@@ -100,14 +100,21 @@ export function parseISSBlock(
   });
 }
 
+/** Payments this close are one payout: two dividends with one record date, split coupons. */
+const SAME_PAYOUT_DAYS = 3;
+
 export function calcDividendFrequency(dates: Date[]): number {
-  if (dates.length < 2) return 1;
+  const DAY_MS = 1000 * 60 * 60 * 24;
+  const payouts: number[] = [];
+  for (const t of dates.map((d) => d.getTime()).sort((a, b) => a - b)) {
+    const last = payouts[payouts.length - 1];
+    if (last == null || (t - last) / DAY_MS > SAME_PAYOUT_DAYS) payouts.push(t);
+  }
+  if (payouts.length < 2) return 1;
 
   const intervals: number[] = [];
-  for (let i = 1; i < dates.length; i++) {
-    const days =
-      (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60 * 60 * 24);
-    intervals.push(days);
+  for (let i = 1; i < payouts.length; i++) {
+    intervals.push((payouts[i] - payouts[i - 1]) / DAY_MS);
   }
 
   const avgDays = intervals.reduce((s, d) => s + d, 0) / intervals.length;

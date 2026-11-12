@@ -76,7 +76,12 @@ export interface PortfolioStats {
   totalIncomePerMonth: number;
   totalIncomePerYear: number;
   totalValue: number;
-  yieldPercent: number;
+  /**
+   * Income of the assets with a known value ÷ that value, %. An asset with income but no price
+   * (crypto, a flat whose price was never entered) adds to the income, not to the yield.
+   * Null when no asset in view has a value.
+   */
+  yieldPercent: number | null;
 }
 
 export interface CategoryStats extends PortfolioStats {

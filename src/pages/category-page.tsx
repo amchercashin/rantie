@@ -38,15 +38,15 @@ export function CategoryPage() {
       compactTitle={decodedType}
       subtitle={
         catStats &&
-        `${catStats.assetCount} ${plural(catStats.assetCount, ['позиция', 'позиции', 'позиций'])} · ${formatPercent(catStats.yieldPercent)} годовых`
+        `${catStats.assetCount} ${plural(catStats.assetCount, ['позиция', 'позиции', 'позиций'])} · ${catStats.yieldPercent != null ? `${formatPercent(catStats.yieldPercent)} годовых` : 'нет цены'}`
       }
     >
       {catStats && (
         <SummaryCard
           incomePerMonth={catStats.totalIncomePerMonth}
-          totalValue={catStats.totalValue}
+          totalValue={catStats.totalValue > 0 ? catStats.totalValue : null}
           yieldPercent={catStats.yieldPercent}
-          portfolioSharePercent={catStats.portfolioSharePercent}
+          portfolioSharePercent={catStats.totalValue > 0 ? catStats.portfolioSharePercent : null}
           taxed={taxed}
         />
       )}

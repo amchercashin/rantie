@@ -37,6 +37,15 @@ export interface PortfolioCalculationInput {
   now?: Date;
 }
 
+/**
+ * Yield of a portfolio or a category: income of the assets with a known value ÷ their value.
+ * Income without a price would otherwise inflate it, and the goal forecast would count every
+ * reinvested ruble as buying more income than it does. Null when no value is known.
+ */
+function pricedYield(pricedIncomePerMonth: number, value: number): number | null {
+  return value > 0 ? calcYieldPercent(pricedIncomePerMonth * 12, value) : null;
+}
+
 export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): PortfolioSnapshot {
   const now = input.now ?? new Date();
   const quantityByAsset = new Map<number, number>();
@@ -57,8 +66,10 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
 
   let totalValue = 0;
   let totalIncomePerMonth = 0;
+  // Income of the assets with a known value: the yield divides this, not all income, by the value.
+  let pricedIncomePerMonth = 0;
   const assetsById = new Map<number, CalculatedAssetStats>();
-  const categoryMap = new Map<string, { value: number; incomePerMonth: number; count: number }>();
+  const categoryMap = new Map<string, { value: number; incomePerMonth: number; pricedIncomePerMonth: number; count: number }>();
   const missingRates = new Set<string>();
 
   for (const asset of input.assets) {
@@ -86,8 +97,10 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
     const incomePerYear = incomePerMonth * 12;
     const yieldPercent = value > 0 ? calcYieldPercent(incomePerYear, value) : 0;
 
+    const pricedIncome = value > 0 ? incomePerMonth : 0;
     totalValue += value;
     totalIncomePerMonth += incomePerMonth;
+    pricedIncomePerMonth += pricedIncome;
     assetsById.set(assetId, {
       assetId,
       totalQuantity,
@@ -106,9 +119,10 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
     if (category) {
       category.value += value;
       category.incomePerMonth += incomePerMonth;
+      category.pricedIncomePerMonth += pricedIncome;
       category.count += 1;
     } else {
-      categoryMap.set(asset.type, { value, incomePerMonth, count: 1 });
+      categoryMap.set(asset.type, { value, incomePerMonth, pricedIncomePerMonth: pricedIncome, count: 1 });
     }
   }
 
@@ -117,7 +131,7 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
     totalIncomePerMonth,
     totalIncomePerYear,
     totalValue,
-    yieldPercent: totalValue > 0 ? calcYieldPercent(totalIncomePerYear, totalValue) : 0,
+    yieldPercent: pricedYield(pricedIncomePerMonth, totalValue),
   };
 
   for (const stats of assetsById.values()) {
@@ -133,7 +147,7 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
       totalIncomePerMonth: category.incomePerMonth,
       totalIncomePerYear: categoryIncomePerYear,
       totalValue: category.value,
-      yieldPercent: category.value > 0 ? calcYieldPercent(categoryIncomePerYear, category.value) : 0,
+      yieldPercent: pricedYield(category.pricedIncomePerMonth, category.value),
       portfolioSharePercent: totalValue > 0 ? (category.value / totalValue) * 100 : 0,
     });
   }

@@ -15,6 +15,15 @@ interface AssetRowProps {
 export function AssetRow({ asset, stats }: AssetRowProps) {
   const isManual = asset.paymentPerUnitSource === 'manual';
   const color = getTypeColor(asset.type);
+  const priced = stats.value > 0;
+  // Income without a price is still income: say the price is missing, not that nothing is paid.
+  const yieldLabel = stats.rateMissing
+    ? 'нет курса'
+    : !(stats.incomePerMonth > 0)
+      ? 'нет выплат'
+      : priced
+        ? formatPercent(stats.yieldPercent)
+        : 'нет цены';
 
   return (
     <TransitionLink
@@ -29,7 +38,7 @@ export function AssetRow({ asset, stats }: AssetRowProps) {
         </div>
         <div className="mt-1 truncate text-[length:var(--hi-text-caption)] leading-tight text-[var(--hi-text-3)]">
           {asset.ticker && <span className="font-semibold tracking-wide">{asset.ticker} · </span>}
-          {formatNumber(stats.totalQuantity)} шт · {formatCurrency(stats.value)}
+          {formatNumber(stats.totalQuantity)} шт{priced && ` · ${formatCurrency(stats.value)}`}
         </div>
       </div>
       <div className="shrink-0 text-right">
@@ -37,7 +46,7 @@ export function AssetRow({ asset, stats }: AssetRowProps) {
           {formatIncome(stats.incomePerMonth)}
         </div>
         <div className="mt-1 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
-          {stats.yieldPercent > 0 ? formatPercent(stats.yieldPercent) : 'нет выплат'}
+          {yieldLabel}
         </div>
       </div>
       <ChevronRight className="size-4 shrink-0 text-[var(--hi-text-3)]" />

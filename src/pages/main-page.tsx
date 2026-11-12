@@ -177,7 +177,7 @@ export function MainPage() {
             income={isLoading ? null : income}
             incomePerYear={isLoading ? null : portfolio.totalIncomePerYear}
             yieldPercent={portfolio.yieldPercent}
-            totalValue={portfolio.totalValue}
+            totalValue={portfolio.totalValue > 0 ? portfolio.totalValue : null}
             mode={mode}
             onModeChange={changeMode}
             animate={animate}

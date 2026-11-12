@@ -56,7 +56,7 @@ export function IncomeStructure({ categories, mode, animate = true }: IncomeStru
               </div>
               <div className="shrink-0 text-right">
                 <div className="text-[length:var(--hi-text-body)] font-semibold text-[var(--hi-gold)]">{formatIncome(income)}</div>
-                <div className="mt-0.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">{formatPercent(c.yieldPercent)} годовых</div>
+                <div className="mt-0.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">{c.yieldPercent != null ? `${formatPercent(c.yieldPercent)} годовых` : 'нет цены'}</div>
               </div>
               <ChevronRight className="size-4 shrink-0 text-[var(--hi-text-3)]" />
             </TransitionLink>

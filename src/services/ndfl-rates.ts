@@ -15,6 +15,12 @@ const ACCOUNT_PREFIX = 'ndfl@';
 /** Before rates moved to accounts: `ndfl-{category}`, and for a while `ndfl@{account}:{category}`. */
 const LEGACY_CATEGORY_PREFIX = 'ndfl-';
 const LEGACY_ACCOUNT_CATEGORY = /^ndfl@(\d+):(.+)$/s;
+/**
+ * Set once the old rates were carried over. The old keys stay (the previous app version still
+ * reads them, so rolling back keeps the user's category rates); this marker stops a second pass.
+ * Neither `ndfl-…` nor `ndfl@{digits}`, so no version of the app takes it for a rate.
+ */
+export const NDFL_MIGRATED_KEY = 'ndfl@migrated';
 
 export interface SettingRow {
   key: string;
@@ -39,38 +45,35 @@ export function ndflKeyAccount(key: string): number | null {
 }
 
 /**
- * Turns per-category rates into per-account ones. An account whose categories all came to one
- * rate other than the default keeps it (e.g. every category at 15%, or the ИИС's shares and
- * bonds at 0%); an account with mixed rates can't be expressed and gets the default. The old
- * keys are removed, so this runs once. An account that already has its own rate keeps it.
+ * Rows that turn per-category rates into per-account ones, plus the marker; empty once done.
+ * An account whose categories all came to one rate other than the default keeps it (e.g. every
+ * category at 15%, or the ИИС's shares and bonds at 0%); an account with mixed rates can't be
+ * expressed and gets the default. An account that already has its own rate keeps it.
  */
 export function legacyNdflToAccounts(
   settings: SettingRow[],
   assets: { id?: number; type: string }[],
   holdings: { accountId: number; assetId: number }[],
-): { put: SettingRow[]; remove: string[] } {
+): SettingRow[] {
+  if (settings.some((row) => row.key === NDFL_MIGRATED_KEY)) return [];
   const categoryRates = new Map<string, number>();
   const accountCategoryRates = new Map<string, number>();
   const accountsWithRate = new Set<number>();
-  const remove: string[] = [];
 
   for (const { key, value } of settings) {
     const rate = Number(value);
     if (key.startsWith(LEGACY_CATEGORY_PREFIX)) {
-      remove.push(key);
       if (isFinite(rate)) categoryRates.set(key.slice(LEGACY_CATEGORY_PREFIX.length), rate);
       continue;
     }
     const legacy = LEGACY_ACCOUNT_CATEGORY.exec(key);
     if (legacy) {
-      remove.push(key);
       if (isFinite(rate)) accountCategoryRates.set(`${legacy[1]}:${legacy[2]}`, rate);
       continue;
     }
     const accountId = ndflKeyAccount(key);
     if (accountId != null) accountsWithRate.add(accountId);
   }
-  if (remove.length === 0) return { put: [], remove };
 
   const typeByAsset = new Map(assets.filter((a) => a.id != null).map((a) => [a.id!, a.type]));
   const categoriesByAccount = new Map<number, Set<string>>();
@@ -92,5 +95,5 @@ export function legacyNdflToAccounts(
       put.push({ key: ndflKey(accountId), value: String(rates[0]) });
     }
   }
-  return { put, remove };
+  return [...put, { key: NDFL_MIGRATED_KEY, value: '1' }];
 }

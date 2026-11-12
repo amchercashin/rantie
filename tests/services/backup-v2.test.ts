@@ -42,8 +42,24 @@ describe('backup v3', () => {
       { key: 'ndfl@1', value: '0' },
       { key: 'ndfl@2', value: '15' },
       { key: 'theme', value: 'x' },
+      { key: 'ndfl@migrated', value: '1' },
     ]));
-    expect(settings.some((r) => r.key.startsWith('ndfl-'))).toBe(false);
+    // Kept, so the previous app version still finds them after a rollback.
+    expect(settings).toContainEqual({ key: 'ndfl-Акции', value: '15' });
+  });
+
+  it('leaves the NDFL rates of a backup made after the move as they are', async () => {
+    const now = new Date().toISOString();
+    await importAllData(JSON.stringify({
+      version: 4,
+      accounts: [{ id: 1, name: 'ИИС', createdAt: now, updatedAt: now }],
+      assets: [{ id: 1, type: 'Акции', name: 'Сбер', dataSource: 'manual', paymentPerUnitSource: 'fact', frequencyPerYear: 1, frequencySource: 'manual', createdAt: now, updatedAt: now }],
+      holdings: [{ id: 1, accountId: 1, assetId: 1, quantity: 10, quantitySource: 'manual', createdAt: now, updatedAt: now }],
+      paymentHistory: [],
+      importRecords: [],
+      settings: [{ key: 'ndfl-Акции', value: '0' }, { key: 'ndfl@migrated', value: '1' }],
+    }));
+    expect((await db.settings.toArray()).map((r) => r.key).sort()).toEqual(['ndfl-Акции', 'ndfl@migrated']);
   });
 
   it('imports v3 format with accounts and holdings', async () => {

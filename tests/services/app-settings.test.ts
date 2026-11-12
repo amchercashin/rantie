@@ -99,8 +99,10 @@ describe('app-settings', () => {
       const rates = await getNdflRates();
       expect(rates.get(iis)).toBe(0); // its only category was at 0%
       expect(rates.get(broker)).toBe(13); // mixed 13% and 0%: the default
+      // The old keys stay for a rollback to the previous version; the marker stops a second pass.
       const keys = (await db.settings.toArray()).map((r) => r.key);
-      expect(keys.some((k) => k.startsWith('ndfl-'))).toBe(false);
+      expect(keys).toContain('ndfl-Облигации');
+      expect(keys).toContain('ndfl@migrated');
 
       // A second start changes nothing.
       await updateNdflRate(iis, 15);
@@ -124,7 +126,7 @@ describe('app-settings', () => {
       const rates = await getNdflRates();
       expect(rates.get(iis)).toBe(0);
       expect(rates.get(flat)).toBe(6);
-      expect((await db.settings.toArray()).map((r) => r.key)).not.toContain(`ndfl@${iis}:Акции`);
+      expect([...(await getNdflRates()).keys()]).toEqual([iis, flat]);
     });
   });
 });

@@ -82,7 +82,7 @@ One rate per account (an ИИС with the tax break at 0%, a folder of rent as se
 - Stored in the Dexie `settings` table as `ndfl@{accountId}` (key helpers in `src/services/ndfl-rates.ts`), so rates travel with the backup; `deleteAccount` removes the account's rate.
 - `getNdflRates()` → accountId → rate, filling every account with `DEFAULT_NDFL_RATE` (13%) until the user picks one — pure calculators treat a missing account as 0%, so the default lives only there. `useNdflRates()`, `updateNdflRate(accountId, rate)`.
 - Tax is applied in one place: `calculatePortfolioSnapshot` (`assetTaxShare`) averages `1 - rate/100` over an asset's holdings by quantity into `CalculatedAssetStats.taxMultiplier`; the projection/timeline (`netFactor`) reuse it. Never read rates directly to tax income or pick a label.
-- Rates used to be per category (`ndfl-{category}`). `legacyNdflToAccounts` turns them into account rates (an account whose categories all had one non-default rate keeps it; mixed → 13%) and deletes the old keys — at startup (`migrateNdflToAccounts` in `main.tsx`) and when restoring an old backup.
+- Rates used to be per category (`ndfl-{category}`). `legacyNdflToAccounts` turns them into account rates (an account whose categories all had one non-default rate keeps it; mixed → 13%) — at startup (`migrateNdflToAccounts` in `main.tsx`) and when restoring an old backup. It leaves the old keys (a rollback to the previous version still finds them) and writes the marker `ndfl@migrated` so it runs once.
 
 ### Navigation & View Transitions
 

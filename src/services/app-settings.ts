@@ -45,13 +45,12 @@ export async function deleteNdflRate(accountId: number): Promise<void> {
 
 /**
  * Once per database: rates set per category before they moved to accounts become account rates
- * (see legacyNdflToAccounts). Runs at startup; a no-op when there's nothing old left.
+ * (see legacyNdflToAccounts). Runs at startup; a no-op once the marker is there.
  */
 export async function migrateNdflToAccounts(): Promise<void> {
   await db.transaction('rw', [db.settings, db.assets, db.holdings], async () => {
     const [settings, assets, holdings] = await Promise.all([db.settings.toArray(), db.assets.toArray(), db.holdings.toArray()]);
-    const { put, remove } = legacyNdflToAccounts(settings, assets, holdings);
-    if (remove.length) await db.settings.bulkDelete(remove);
-    if (put.length) await db.settings.bulkPut(put);
+    const rows = legacyNdflToAccounts(settings, assets, holdings);
+    if (rows.length) await db.settings.bulkPut(rows);
   });
 }

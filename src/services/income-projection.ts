@@ -70,6 +70,7 @@ export interface ProjectionInput {
   assets: Asset[];
   paymentHistory: PaymentHistory[];
   assetsById: Map<number, CalculatedAssetStats>;
+  ndflRates: Map<string, number>;
   now?: Date;
 }
 
@@ -205,9 +206,9 @@ function groupHistory(history: PaymentHistory[]): Map<number, PaymentHistory[]> 
   return byAsset;
 }
 
-/** Per-unit gross amount → net RUB for the whole position (NDFL as in the snapshot, by account). */
-function netFactor(stats: CalculatedAssetStats): number {
-  return stats.totalQuantity * stats.taxMultiplier * stats.rateToRub;
+function netFactor(asset: Asset, stats: CalculatedAssetStats, ndflRates: Map<string, number>): number {
+  const taxMultiplier = 1 - (ndflRates.get(asset.type) ?? 0) / 100;
+  return stats.totalQuantity * taxMultiplier * stats.rateToRub;
 }
 
 /** Expected net payments over the next 12 months, soonest first. */
@@ -221,7 +222,7 @@ export function projectIncome(input: ProjectionInput): ProjectedPayment[] {
     if (asset.id == null) continue;
     const stats = input.assetsById.get(asset.id);
     if (!stats || stats.totalQuantity <= 0) continue;
-    const factor = netFactor(stats);
+    const factor = netFactor(asset, stats, input.ndflRates);
     for (const p of futurePaymentsFor(asset, byAsset.get(asset.id) ?? [], now, horizon, stats.annualIncomePerUnit)) {
       result.push({
         assetId: asset.id,
@@ -257,7 +258,7 @@ export function incomeTimeline(input: ProjectionInput & { monthsBack?: number; m
     const { real } = splitHistory(history);
     const future = futurePaymentsFor(asset, history, now, horizon, stats.annualIncomePerUnit);
     const records = [...real.filter((p) => p.date <= now), ...future.map(({ amount, date }) => ({ amount, date }))];
-    prepared.push({ asset, factor: netFactor(stats), records });
+    prepared.push({ asset, factor: netFactor(asset, stats, input.ndflRates), records });
   }
 
   const points: TimelinePoint[] = [];

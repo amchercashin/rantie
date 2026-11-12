@@ -5,6 +5,7 @@ import { SummaryCard } from '@/components/shared/summary-card';
 import { AssetRow } from '@/components/category/asset-row';
 import { Card, CategoryDot, Section, EmptyState } from '@/components/ds/surface';
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
+import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { getTypeColor } from '@/models/account';
 import { formatPercent, plural } from '@/lib/utils';
 
@@ -12,8 +13,9 @@ export function CategoryPage() {
   const { type } = useParams<{ type: string }>();
   const decodedType = decodeURIComponent(type ?? '');
   const { categories, assetsById, assets, isLoading } = usePortfolioStats();
+  const taxed = (useNdflRates().get(decodedType) ?? 0) > 0;
+
   const catStats = categories.find((c) => c.type === decodedType);
-  const taxed = catStats?.taxed ?? false;
   const rows = useMemo(
     () =>
       assets

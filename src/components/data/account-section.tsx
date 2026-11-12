@@ -6,8 +6,6 @@ import { getTypeColor } from '@/models/account';
 import { cn, formatCurrency, formatMoney, formatNumber, plural } from '@/lib/utils';
 import { updateAccount, deleteAccount } from '@/hooks/use-accounts';
 import { useExchangeRateMap } from '@/hooks/use-exchange-rates';
-import { useAccountNdflRates, useNdflRates } from '@/hooks/use-ndfl-rates';
-import { accountNdflLabel } from '@/services/app-settings';
 import { getRateToRub } from '@/services/exchange-rates';
 import { Card, AssetAvatar, CategoryDot } from '@/components/ds/surface';
 import { Badge } from '@/components/ds/badge';
@@ -45,8 +43,6 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
   const [editOpen, setEditOpen] = useState(false);
   const highlightRowRef = useRef<HTMLButtonElement>(null);
   const exchangeRates = useExchangeRateMap();
-  const ndflRates = useNdflRates();
-  const accountNdflRates = useAccountNdflRates();
   const { confirm, toast } = useFeedback();
 
   useEffect(() => {
@@ -85,12 +81,6 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
       .sort((a, b) => b.value - a.value);
   }, [rows]);
   const fromImport = holdings.length > 0 && holdings.every((h) => h.quantitySource === 'import');
-  // Shown only when the account has its own rate somewhere (set in Настройки → НДФЛ).
-  const ndflLabel = accountNdflLabel(
-    groups.map((g) => g.type),
-    ndflRates,
-    account.id != null ? accountNdflRates.get(account.id) : undefined,
-  );
 
   const removeAccount = async () => {
     setMenuOpen(false);
@@ -124,7 +114,6 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
             </div>
             <div className="mt-0.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
               {holdings.length} {plural(holdings.length, ['позиция', 'позиции', 'позиций'])} · {formatCurrency(totalValue)}
-              {ndflLabel && ` · ${ndflLabel}`}
             </div>
           </div>
           <ChevronDown className={cn('size-4 shrink-0 text-[var(--hi-text-3)] transition-transform duration-300', expanded && 'rotate-180')} />

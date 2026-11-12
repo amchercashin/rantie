@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, FileUp, MoreHorizontal, PencilLine, Percent, Plus, Trash2, Wallet } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, FileUp, MoreHorizontal, PencilLine, Plus, Trash2, Wallet } from 'lucide-react';
 import type { Account, Holding } from '@/models/account';
 import type { Asset } from '@/models/types';
 import { getTypeColor } from '@/models/account';
-import { cn, formatCurrency, formatMoney, formatNumber, formatRate, plural } from '@/lib/utils';
-import { updateAccount, deleteAccount, setAccountNdflRate } from '@/hooks/use-accounts';
+import { cn, formatCurrency, formatMoney, formatNumber, plural } from '@/lib/utils';
+import { updateAccount, deleteAccount } from '@/hooks/use-accounts';
 import { useExchangeRateMap } from '@/hooks/use-exchange-rates';
 import { getRateToRub } from '@/services/exchange-rates';
 import { Card, AssetAvatar, CategoryDot } from '@/components/ds/surface';
@@ -12,7 +12,6 @@ import { Badge } from '@/components/ds/badge';
 import { BottomSheet } from '@/components/ds/bottom-sheet';
 import { useFeedback } from '@/components/ds/feedback';
 import { EditTextSheet } from './edit-text-sheet';
-import { AccountNdflSheet } from './account-ndfl-sheet';
 import { HoldingSheet } from './holding-sheet';
 import { AddAssetSheet } from './add-asset-sheet';
 
@@ -39,7 +38,6 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
   }, [focus]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
-  const [ndflOpen, setNdflOpen] = useState(false);
   const [addAssetOpen, setAddAssetOpen] = useState(false);
   const [editing, setEditing] = useState<{ asset: Asset; holding: Holding } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -116,7 +114,6 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
             </div>
             <div className="mt-0.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
               {holdings.length} {plural(holdings.length, ['позиция', 'позиции', 'позиций'])} · {formatCurrency(totalValue)}
-              {account.ndflRate != null && ` · НДФЛ\u00a0${formatRate(account.ndflRate)}`}
             </div>
           </div>
           <ChevronDown className={cn('size-4 shrink-0 text-[var(--hi-text-3)] transition-transform duration-300', expanded && 'rotate-180')} />
@@ -209,15 +206,9 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
         <Card className="overflow-hidden">
           {[
             { icon: <PencilLine />, label: 'Переименовать', onClick: () => { setMenuOpen(false); setRenameOpen(true); } },
-            {
-              icon: <Percent />,
-              label: 'НДФЛ',
-              detail: account.ndflRate != null ? formatRate(account.ndflRate) : 'как по категориям',
-              onClick: () => { setMenuOpen(false); setNdflOpen(true); },
-            },
             { icon: <Plus />, label: 'Добавить актив', onClick: () => { setMenuOpen(false); setAddAssetOpen(true); } },
             { icon: <FileUp />, label: 'Импорт отчёта брокера', onClick: () => { setMenuOpen(false); onImport(); } },
-          ].map((item: { icon: ReactNode; label: string; detail?: string; onClick: () => void }) => (
+          ].map((item) => (
             <button
               key={item.label}
               type="button"
@@ -225,9 +216,6 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
               className="hi-pressable relative flex w-full items-center gap-3 px-4 py-4 text-left text-[length:var(--hi-text-body)] text-[var(--hi-text)] active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-12 after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden [&_svg]:size-[18px] [&_svg]:text-[var(--hi-gold)]"
             >
               {item.icon} {item.label}
-              {item.detail && (
-                <span className="ml-auto pl-3 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">{item.detail}</span>
-              )}
             </button>
           ))}
         </Card>
@@ -247,17 +235,6 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
         label="Название"
         initialValue={account.name}
         onSave={async (name) => { if (account.id != null) await updateAccount(account.id, { name }); }}
-      />
-
-      <AccountNdflSheet
-        open={ndflOpen}
-        onOpenChange={setNdflOpen}
-        rate={account.ndflRate}
-        onSave={async (rate) => {
-          if (account.id == null) return;
-          await setAccountNdflRate(account.id, rate);
-          toast(rate == null ? 'НДФЛ счёта — по категориям' : `НДФЛ счёта — ${formatRate(rate)}`);
-        }}
       />
 
       {editing && (

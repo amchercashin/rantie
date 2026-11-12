@@ -40,7 +40,7 @@ function run(assets: Asset[], holdings: Holding[], history: PaymentHistory[], nd
   const snapshot = calculatePortfolioSnapshot({
     assets, holdings, paymentHistory: history, ndflRates: ndfl, exchangeRates: new Map([['USD', 90]]), now: NOW,
   });
-  const input = { assets, paymentHistory: history, assetsById: snapshot.assetsById, now: NOW };
+  const input = { assets, paymentHistory: history, assetsById: snapshot.assetsById, ndflRates: ndfl, now: NOW };
   return { snapshot, projection: projectIncome(input), timeline: incomeTimeline(input) };
 }
 
@@ -58,22 +58,6 @@ describe('projectIncome', () => {
     expect(projection[0].amount).toBeCloseTo(36 * 10 * 0.87);
     expect(projection[0].perUnit).toBe(36);
     expect(projection[0]).toMatchObject({ estimated: false, basis: 'last-year' });
-  });
-
-  it('taxes each account at its own rate', () => {
-    const assets = [stock({ id: 1 })];
-    const holdings: Holding[] = [
-      { ...holding(1, 30), id: 1, accountId: 1 },
-      { ...holding(1, 10), id: 2, accountId: 2 },
-    ];
-    const history = [payment(1, '2026-07-18', 36)];
-    const snapshot = calculatePortfolioSnapshot({
-      assets, holdings, paymentHistory: history, ndflRates: new Map([['Акции', 13]]),
-      accountNdflRates: new Map([[2, 0]]), exchangeRates: new Map(), now: NOW,
-    });
-    const projection = projectIncome({ assets, paymentHistory: history, assetsById: snapshot.assetsById, now: NOW });
-
-    expect(projection[0].amount).toBeCloseTo(36 * 30 * 0.87 + 36 * 10);
   });
 
   it('prefers a forecast over the repeated payment', () => {

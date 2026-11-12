@@ -103,8 +103,6 @@ describe('tax disclosure UI', () => {
             currency: 'RUB',
             rateToRub: 1,
             rateMissing: false,
-            taxMultiplier: 0.87,
-            taxed: true,
           }}
         />
       </MemoryRouter>,

@@ -3,7 +3,6 @@ import { db } from '@/db/database';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { DEFAULT_NDFL_RATE, updateNdflRate } from '@/services/app-settings';
 import { getTypeColor } from '@/models/account';
-import { formatRate } from '@/lib/utils';
 import { Card, Section } from '@/components/ds/surface';
 import { NdflRateSelector } from './ndfl-rate-selector';
 
@@ -15,11 +14,6 @@ export function NdflSettings() {
   }, []);
 
   const ndflRates = useNdflRates();
-  // Accounts with their own rate: for their holdings the category rates below don't apply.
-  const ownRates = useLiveQuery(async () => {
-    const accounts = await db.accounts.toArray();
-    return accounts.filter((a) => typeof a.ndflRate === 'number').sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  }, []);
 
   if (!categories || categories.length === 0) return null;
 
@@ -30,8 +24,7 @@ export function NdflSettings() {
     >
       <p className="mb-3 px-1 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
         По умолчанию 13% — так облагаются дивиденды, купоны и проценты по вкладам у большинства. 15% — если
-        инвестиционный доход больше 2,4 млн ₽ в год, 4% — аренда как самозанятый. Для ИИС с налоговой льготой
-        поставьте 0% самому счёту: «Счета» → ⋯ → НДФЛ.
+        инвестиционный доход больше 2,4 млн ₽ в год, 4% — аренда как самозанятый, 0% — ИИС с налоговой льготой.
       </p>
       <Card className="overflow-hidden px-4">
         {categories.map((type, i) => (
@@ -45,13 +38,6 @@ export function NdflSettings() {
           </div>
         ))}
       </Card>
-      {ownRates && ownRates.length > 0 && (
-        <p className="mt-3 px-1 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
-          {ownRates.length === 1 ? 'Своя ставка у счёта ' : 'Свои ставки у счетов '}
-          {ownRates.map((a) => `«${a.name}» — ${formatRate(a.ndflRate!)}`).join(', ')}. Для их позиций ставки выше не
-          действуют. Изменить: «Счета» → ⋯ → НДФЛ.
-        </p>
-      )}
     </Section>
   );
 }

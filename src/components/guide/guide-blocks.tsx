@@ -107,6 +107,20 @@ export function Caption({ label, children }: { label: string; children: ReactNod
   );
 }
 
+/** Link to a page outside the app; opens in a new tab so the guide stays where it was. */
+export function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-semibold text-[var(--hi-gold)] underline decoration-[rgba(217,192,142,0.35)] underline-offset-[3px]"
+    >
+      {children}
+    </a>
+  );
+}
+
 /** Link to another section of the guide: scrolls the page there. */
 export function Ref({ to, children }: { to: GuideSectionId; children: ReactNode }) {
   return (

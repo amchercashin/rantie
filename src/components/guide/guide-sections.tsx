@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { GuideSectionId } from '@/lib/guide';
 import { SyncGlyph } from '@/components/ds/sync-glyph';
-import { Bullets, Caption, Captions, Example, Fact, Facts, Formula, Item, Lead, P, Ref, Result, Step, Sub } from './guide-blocks';
+import { Bullets, Caption, Captions, Example, ExternalLink, Fact, Facts, Formula, Item, Lead, P, Ref, Result, Step, Sub } from './guide-blocks';
 
 /**
  * The text of «Как устроен Рантье». Written for users: plain words, no code names.
@@ -9,6 +9,9 @@ import { Bullets, Caption, Captions, Example, Fact, Facts, Formula, Item, Lead, 
  * change the matching section here (and `docs/calculations.md`). Hints link here with `more`,
  * so a hint's text must stay a short version of its section.
  */
+
+/** The public repository where dohod.ru dividends and Parus payouts are collected every week. */
+const DATA_REPO_URL = 'https://github.com/amchercashin/heroincome-data';
 
 /** Amount in rubles with non-breaking spaces, as the app prints money: «30 000 ₽». */
 const rub = (value: string) => `${value.replace(/ /g, ' ')} ₽`;
@@ -45,8 +48,8 @@ export const GUIDE_CONTENT: Record<GuideSectionId, ReactNode> = {
       <Sub>Какой дорогой идут данные</Sub>
       <P>
         Мосбиржу приложение спрашивает напрямую с телефона. dohod.ru и «Парус» — через посредника: раз в неделю, в понедельник утром,
-        робот собирает их данные в открытые файлы на GitHub, а приложение скачивает эти файлы. Поэтому свежий дивиденд может появиться
-        в приложении через несколько дней.
+        робот собирает их данные в открытые файлы на <ExternalLink href={DATA_REPO_URL}>GitHub</ExternalLink>, а приложение скачивает
+        эти файлы. Поэтому свежий дивиденд может появиться в приложении через несколько дней.
       </P>
       <P>В запросах только тикеры и ISIN. Количество бумаг, суммы и названия счетов никуда не уходят.</P>
       <Sub>Если бумаги нет в источниках</Sub>

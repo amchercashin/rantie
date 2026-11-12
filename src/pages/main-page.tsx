@@ -8,7 +8,6 @@ import { IncomeDynamicsChart } from '@/components/main/income-dynamics-chart';
 import { UpcomingPayments } from '@/components/main/upcoming-payments';
 import { IncomeStructure } from '@/components/main/income-structure';
 import { GoalPath } from '@/components/main/goal-path';
-import { GoalSheet } from '@/components/main/goal-sheet';
 import { Wordmark } from '@/components/ds/brand-mark';
 import { Section, EmptyState } from '@/components/ds/surface';
 import { Button } from '@/components/ds/button';
@@ -22,7 +21,6 @@ import { useDemoAccountId } from '@/hooks/use-demo';
 import { useBackupReminder } from '@/hooks/use-backup-reminder';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { useIncomeGoal } from '@/hooks/use-income-goal';
-import { setIncomeGoal } from '@/services/income-goal';
 import { InstallCard } from '@/components/install-card';
 import { upcomingPayments } from '@/services/income-projection';
 import { loadDemoPortfolio, removeDemoPortfolio } from '@/services/demo-portfolio';
@@ -48,7 +46,6 @@ export function MainPage() {
   const backup = useBackupReminder();
   const ndflRates = useNdflRates();
   const goal = useIncomeGoal();
-  const [goalOpen, setGoalOpen] = useState(false);
   const upcomingRef = useRef<HTMLElement>(null);
   const structureRef = useRef<HTMLElement>(null);
   const stopScrollRef = useRef<(() => void) | null>(null);
@@ -192,21 +189,9 @@ export function MainPage() {
                 goalPerMonth={goal}
                 mode={mode}
                 animate={animate}
-                onEdit={() => setGoalOpen(true)}
+                onOpen={() => withViewTransition(() => navigate('/goal'), 'forward')}
               />
             }
-          />
-          <GoalSheet
-            open={goalOpen}
-            onOpenChange={setGoalOpen}
-            goalPerMonth={goal ?? null}
-            incomePerMonth={portfolio.totalIncomePerMonth ?? 0}
-            taxed={taxed}
-            onSave={async (next) => {
-              const had = goal != null;
-              await setIncomeGoal(next);
-              toast(next == null ? 'Цель убрана' : had ? 'Цель обновлена' : 'Цель поставлена');
-            }}
           />
 
           <div className="mt-8" style={animate ? { animation: 'hi-fade-slide-up 0.7s var(--hi-ease-out) 0.65s both' } : undefined}>

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/database';
-import { getIncomeGoal, goalProgress, setIncomeGoal } from '@/services/income-goal';
+import { getGoalPlan, getIncomeGoal, goalProgress, setGoalPlan, setIncomeGoal } from '@/services/income-goal';
 import { exportAllData, importAllData } from '@/services/backup';
 
 describe('income goal storage', () => {
@@ -43,6 +43,43 @@ describe('income goal storage', () => {
     await setIncomeGoal(null);
     await importAllData(json);
     expect(await getIncomeGoal()).toBe(120_000);
+  });
+});
+
+describe('goal plan storage', () => {
+  beforeEach(async () => {
+    await db.delete();
+    await db.open();
+  });
+
+  it('is empty until set: no top-ups, the portfolio’s own yield', async () => {
+    expect(await getGoalPlan()).toEqual({ monthly: 0, yearly: 0, customYield: null });
+  });
+
+  it('stores top-ups in whole rubles and a yield of one’s own to a hundredth', async () => {
+    await setGoalPlan({ monthly: 50_000.6, yearly: 200_000, customYield: 9.456 });
+    expect(await getGoalPlan()).toEqual({ monthly: 50_001, yearly: 200_000, customYield: 9.46 });
+  });
+
+  it('changes only what is passed, and clears a field on zero or null', async () => {
+    await setGoalPlan({ monthly: 50_000, yearly: 200_000, customYield: 9 });
+    await setGoalPlan({ yearly: 0 });
+    expect(await getGoalPlan()).toEqual({ monthly: 50_000, yearly: 0, customYield: 9 });
+    await setGoalPlan({ customYield: null });
+    expect(await getGoalPlan()).toEqual({ monthly: 50_000, yearly: 0, customYield: null });
+  });
+
+  it('keeps a yield of zero or below as one’s own choice', async () => {
+    await setGoalPlan({ customYield: 0 });
+    expect((await getGoalPlan()).customYield).toBe(0);
+  });
+
+  it('travels with the backup', async () => {
+    await setGoalPlan({ monthly: 30_000, customYield: 8 });
+    const json = await exportAllData();
+    await setGoalPlan({ monthly: 0, customYield: null });
+    await importAllData(json);
+    expect(await getGoalPlan()).toEqual({ monthly: 30_000, yearly: 0, customYield: 8 });
   });
 });
 

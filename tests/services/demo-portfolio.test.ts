@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/database';
 import { clearAllData } from '@/services/app-settings';
-import { getDemoAccountId, loadDemoPortfolio, removeDemoPortfolio } from '@/services/demo-portfolio';
+import { DEMO_GOAL_PER_MONTH, getDemoAccountId, loadDemoPortfolio, removeDemoPortfolio } from '@/services/demo-portfolio';
+import { getIncomeGoal, setIncomeGoal } from '@/services/income-goal';
 import { calculatePortfolioSnapshot } from '@/services/portfolio-calculator';
 
 describe('demo portfolio', () => {
@@ -83,5 +84,37 @@ describe('demo portfolio sources', () => {
     expect(sourceOf('Облигации')).toEqual(new Set(['moex']));
     expect(sourceOf('Фонды')).toEqual(new Set(['parus']));
     expect(sourceOf('Недвижимость')).toEqual(new Set(['manual']));
+  });
+});
+
+describe('demo goal', () => {
+  beforeEach(async () => {
+    await clearAllData();
+  });
+
+  it('sets a goal of its own, so the goal page has something to show', async () => {
+    await loadDemoPortfolio();
+    expect(await getIncomeGoal()).toBe(DEMO_GOAL_PER_MONTH);
+  });
+
+  it('leaves the user’s own goal alone, and keeps it after the demo is removed', async () => {
+    await setIncomeGoal(250_000);
+    await loadDemoPortfolio();
+    expect(await getIncomeGoal()).toBe(250_000);
+    await removeDemoPortfolio();
+    expect(await getIncomeGoal()).toBe(250_000);
+  });
+
+  it('takes its goal away with the demo', async () => {
+    await loadDemoPortfolio();
+    await removeDemoPortfolio();
+    expect(await getIncomeGoal()).toBeNull();
+  });
+
+  it('keeps a goal the user changed while looking at the demo', async () => {
+    await loadDemoPortfolio();
+    await setIncomeGoal(120_000);
+    await removeDemoPortfolio();
+    expect(await getIncomeGoal()).toBe(120_000);
   });
 });

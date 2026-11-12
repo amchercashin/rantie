@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Bot, FileUp, Landmark, LineChart, Lock, PenLine, Sparkles } from 'lucide-react';
 import { db } from '@/db/database';
 import { BrandMark, Wordmark } from '@/components/ds/brand-mark';
@@ -75,6 +75,7 @@ export function Welcome() {
   const [index, setIndex] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     if (isWelcomeDone()) return;
@@ -117,6 +118,11 @@ export function Welcome() {
       setVisible(false);
       await then?.();
     }, 380);
+  };
+
+  // The first screen after the welcome is always Доход, whatever link the app was opened with.
+  const goHome = () => {
+    if (pathname !== '/') navigate('/', { replace: true });
   };
 
   const openData = (action: 'import' | 'add-account') =>
@@ -202,7 +208,7 @@ export function Welcome() {
             <Button variant="secondary" size="lg" block icon={<PenLine />} onClick={() => openData('add-account')}>
               Добавить вручную
             </Button>
-            <Button variant="ghost" size="lg" block icon={<Sparkles />} onClick={() => finish(() => { void loadDemoPortfolio(); })}>
+            <Button variant="ghost" size="lg" block icon={<Sparkles />} onClick={() => finish(() => { void loadDemoPortfolio(); goHome(); })}>
               Посмотреть на демо-портфеле
             </Button>
           </div>
@@ -233,7 +239,7 @@ export function Welcome() {
         ) : (
           <button
             type="button"
-            onClick={() => finish()}
+            onClick={() => finish(goHome)}
             className="px-2 py-2 text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-text-3)]"
           >
             Позже

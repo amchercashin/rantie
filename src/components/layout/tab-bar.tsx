@@ -16,7 +16,7 @@ export const TABS: Tab[] = [
     path: '/',
     label: 'Доход',
     icon: Sparkles,
-    match: (p) => p === '/' || p.startsWith('/category') || p.startsWith('/asset'),
+    match: (p) => p === '/' || p.startsWith('/category') || p.startsWith('/asset') || p.startsWith('/goal'),
   },
   { path: '/payments', label: 'Выплаты', icon: CalendarDays, match: (p) => p.startsWith('/payments') },
   { path: '/data', label: 'Счета', icon: Landmark, match: (p) => p.startsWith('/data') },

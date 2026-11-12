@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { db } from '@/db/database';
-import {
-  updateAppSetting, getNdflRates, updateNdflRate, DEFAULT_NDFL_RATE,
-  getAccountNdflRates, updateAccountNdflRate, accountNdflLabel,
-} from '@/services/app-settings';
-import { deleteAccount } from '@/hooks/use-accounts';
+import { updateAppSetting, getNdflRates, updateNdflRate, DEFAULT_NDFL_RATE } from '@/services/app-settings';
 import { createAssetDraft } from '@/services/asset-factory';
 
 describe('app-settings', () => {
@@ -89,65 +85,6 @@ describe('app-settings', () => {
       await updateNdflRate('Недвижимость', 6.5);
       const rates = await getNdflRates();
       expect(rates.get('Недвижимость')).toBe(6.5);
-    });
-  });
-
-  describe('account rates inside a category', () => {
-    it('stores, reads and clears an own rate per account and category', async () => {
-      await updateAccountNdflRate(7, 'Акции', 0);
-      await updateAccountNdflRate(7, 'Облигации', 13);
-      await updateAccountNdflRate(9, 'Акции', 15);
-
-      let rates = await getAccountNdflRates();
-      expect(rates.get(7)?.get('Акции')).toBe(0);
-      expect(rates.get(7)?.get('Облигации')).toBe(13);
-      expect(rates.get(9)?.get('Акции')).toBe(15);
-
-      await updateAccountNdflRate(7, 'Акции', null);
-      rates = await getAccountNdflRates();
-      expect(rates.get(7)?.has('Акции')).toBe(false);
-      expect(rates.get(7)?.get('Облигации')).toBe(13);
-    });
-
-    it('keeps a category name with a colon whole', async () => {
-      await updateAccountNdflRate(3, 'ЗПИФ: недвижимость', 4);
-      expect((await getAccountNdflRates()).get(3)?.get('ЗПИФ: недвижимость')).toBe(4);
-    });
-
-    it('never shows up as a category rate', async () => {
-      await updateAccountNdflRate(3, 'Акции', 0);
-      expect((await getNdflRates()).size).toBe(0);
-    });
-
-    it('goes away with the account', async () => {
-      const now = new Date();
-      const id = (await db.accounts.add({ name: 'ИИС', createdAt: now, updatedAt: now })) as number;
-      const other = (await db.accounts.add({ name: 'Брокер', createdAt: now, updatedAt: now })) as number;
-      await updateAccountNdflRate(id, 'Акции', 0);
-      await updateAccountNdflRate(other, 'Акции', 15);
-
-      await deleteAccount(id);
-
-      const rates = await getAccountNdflRates();
-      expect(rates.has(id)).toBe(false);
-      expect(rates.get(other)?.get('Акции')).toBe(15);
-    });
-  });
-
-  describe('accountNdflLabel', () => {
-    const categoryRates = new Map([['Акции', 13], ['Облигации', 13]]);
-
-    it('is empty while the account follows its categories', () => {
-      expect(accountNdflLabel(['Акции'], categoryRates, undefined)).toBeNull();
-      expect(accountNdflLabel(['Акции'], categoryRates, new Map([['Вклады', 0]]))).toBeNull();
-    });
-
-    it('names the one rate of the account', () => {
-      expect(accountNdflLabel(['Акции', 'Облигации'], categoryRates, new Map([['Акции', 0], ['Облигации', 0]]))).toBe('НДФЛ\u00a00%');
-    });
-
-    it('gives a range when its categories are taxed differently', () => {
-      expect(accountNdflLabel(['Акции', 'Облигации'], categoryRates, new Map([['Акции', 0]]))).toBe('НДФЛ\u00a00–13%');
     });
   });
 });

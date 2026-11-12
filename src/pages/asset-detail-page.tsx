@@ -23,7 +23,7 @@ import { calcAssetAnnualIncomePerUnit } from '@/services/income-calculator';
 import { normalizeCurrency } from '@/services/exchange-rates';
 import { incomeSpreadOf, isExchangeTraded } from '@/models/asset-kind';
 import {
-  cn, formatCurrency, formatCurrencyFull, formatFrequency, formatLongDate, formatMoney, formatNumber, formatNumericDate, formatPrice,
+  cn, formatCurrency, formatCurrencyFull, formatFrequency, formatLongDate, formatMoney, formatNumber, formatNumericDate, formatPrice, plural,
 } from '@/lib/utils';
 
 const FREQUENCIES = [12, 4, 2, 1];
@@ -96,7 +96,9 @@ export function AssetDetailPage() {
         : 'За последние 12 месяцев выплат не было.'
     : spread === 'period'
       ? `Последняя выплата × ${asset.frequencyPerYear} (${formatFrequency(asset.frequencyPerYear)})`
-      : `Сумма ${calculated.usedPayments.length} ${calculated.usedPayments.length === 1 ? 'выплаты' : 'выплат'} за 12 месяцев`;
+      : calculated.annualized
+        ? `Бумага платит меньше года — средняя из ${calculated.annualized.payouts} ${plural(calculated.annualized.payouts, ['выплаты', 'выплат', 'выплат'])} × ${calculated.annualized.frequencyPerYear} (${formatFrequency(calculated.annualized.frequencyPerYear)})`
+        : `Сумма ${calculated.usedPayments.length} ${calculated.usedPayments.length === 1 ? 'выплаты' : 'выплат'} за 12 месяцев`;
   // "на 1 бумагу" for securities, "на 1 шт" for several units, nothing for a single object.
   const perUnitLabel = exchange ? 'на 1 бумагу' : totalQuantity === 1 ? '' : 'на 1 шт';
   const taxed = (ndflRates.get(asset.type) ?? 0) > 0;
@@ -207,7 +209,7 @@ export function AssetDetailPage() {
 
       <Hint id="asset-income-modes" className="mt-4" title="Два способа учесть доход">
         {exchange
-          ? '«По выплатам» — сумма выплат бумаги за последние 12 месяцев с Мосбиржи и dohod.ru, обновляется сама. «Своя сумма» — если знаете точнее, например объявлен новый дивиденд.'
+          ? '«По выплатам» — сумма выплат бумаги за последние 12 месяцев с Мосбиржи и dohod.ru (если бумага платит меньше года — средняя выплата × частота), обновляется сама. «Своя сумма» — если знаете точнее, например объявлен новый дивиденд.'
           : '«Своя сумма» — укажите, сколько приходит в месяц, и забудьте. «По выплатам» — записывайте каждое поступление во вкладке «Выплаты»: доход будет точным, но если забыть внести выплату, он упадёт.'}
       </Hint>
 

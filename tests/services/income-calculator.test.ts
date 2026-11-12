@@ -8,6 +8,7 @@ import {
   calcAnnualIncomePerUnit,
   calcAnnualIncomePerUnitByPeriod,
   calcAssetAnnualIncomePerUnit,
+  annualizeShortHistory,
 } from '@/services/income-calculator';
 
 describe('income-calculator', () => {
@@ -298,5 +299,82 @@ describe('calcAssetAnnualIncomePerUnit', () => {
     const asset = { paymentPerUnitSource: 'fact' as const, frequencyPerYear: 2 };
     expect(calcAssetAnnualIncomePerUnit(asset, 'year', history, now).annualIncome).toBe(40);
     expect(calcAssetAnnualIncomePerUnit(asset, 'period', history, now).annualIncome).toBe(20);
+  });
+});
+
+describe('a history shorter than a year (annualizeShortHistory)', () => {
+  const now = new Date('2026-11-12T12:00:00');
+  const fund = { paymentPerUnitSource: 'fact' as const, frequencyPerYear: 12, type: 'Фонды' };
+  /** Monthly payouts on the last day of each month, `from`..`to` inclusive (months 0–11 of 2026, or negative for 2025). */
+  const monthly = (amount: number, from: number, to: number) => {
+    const out = [];
+    for (let m = from; m <= to; m++) out.push({ amount, date: new Date(2026, m + 1, 0, 12) });
+    return out;
+  };
+
+  it('counts a fund paying monthly since April as the average payout × 12, not 7/12 of it', () => {
+    const history = monthly(9.38, 3, 9); // April–October 2026: 7 payouts
+    const r = calcAssetAnnualIncomePerUnit(fund, 'year', history, now);
+    expect(r.annualIncome).toBeCloseTo(9.38 * 12);
+    expect(r.annualized).toEqual({ frequencyPerYear: 12, payouts: 7, averagePayout: expect.closeTo(9.38) });
+    expect(r.usedPayments).toHaveLength(7);
+  });
+
+  it('takes the average of uneven payouts', () => {
+    const history = [{ amount: 8.25, date: new Date('2025-12-30T12:00:00') }, ...monthly(8.63, 0, 9)];
+    const r = calcAssetAnnualIncomePerUnit(fund, 'year', history, now);
+    expect(r.annualIncome).toBeCloseTo(((8.25 + 8.63 * 10) / 11) * 12);
+  });
+
+  it('gives the plain sum once the history reaches back a year — a skipped month stays a gap', () => {
+    const history = [...monthly(9, -3, 3), ...monthly(9, 5, 9)]; // Oct 2025 – Oct 2026, May skipped
+    const r = calcAssetAnnualIncomePerUnit(fund, 'year', history, now);
+    expect(r.annualized).toBeUndefined();
+    expect(r.annualIncome).toBeCloseTo(9 * 11);
+  });
+
+  it('does not jump when the history comes of age', () => {
+    const history = [{ amount: 8.25, date: new Date('2025-12-30T12:00:00') }, ...monthly(8.25, 0, 10)];
+    const before = calcAssetAnnualIncomePerUnit(fund, 'year', history, new Date('2026-12-15T12:00:00'));
+    const after = calcAssetAnnualIncomePerUnit(fund, 'year', [...history, { amount: 8.25, date: new Date('2026-12-30T12:00:00') }], new Date('2027-01-05T12:00:00'));
+    expect(before.annualIncome).toBeCloseTo(8.25 * 12);
+    expect(after.annualIncome).toBeCloseTo(8.25 * 12);
+  });
+
+  it('falls back to the plain sum when the payouts have stopped', () => {
+    const history = monthly(9.38, 1, 4); // February–May, nothing since
+    const r = calcAssetAnnualIncomePerUnit(fund, 'year', history, now);
+    expect(r.annualized).toBeUndefined();
+    expect(r.annualIncome).toBeCloseTo(9.38 * 4);
+  });
+
+  it('needs two payouts to trust the frequency — except a bond, whose coupon period is known', () => {
+    const one = [{ amount: 25, date: new Date('2026-10-20T12:00:00') }];
+    expect(calcAssetAnnualIncomePerUnit({ ...fund, frequencyPerYear: 4, type: 'Акции' }, 'year', one, now).annualIncome).toBe(25);
+    expect(calcAssetAnnualIncomePerUnit({ ...fund, frequencyPerYear: 4, type: 'Облигации' }, 'year', one, now).annualIncome).toBe(100);
+  });
+
+  it('counts records within three days as one payout', () => {
+    const history = [
+      { amount: 6, date: new Date('2026-08-10T12:00:00') },
+      { amount: 4, date: new Date('2026-08-11T12:00:00') },
+      { amount: 10, date: new Date('2026-11-10T12:00:00') },
+    ];
+    const r = calcAssetAnnualIncomePerUnit({ ...fund, frequencyPerYear: 4 }, 'year', history, now);
+    expect(r.annualized?.payouts).toBe(2);
+    expect(r.annualIncome).toBeCloseTo(40);
+  });
+
+  it('never gives less than the plain sum', () => {
+    const history = monthly(5, 7, 9); // three payouts, but the frequency says once a year
+    const trailing = calcAnnualIncomePerUnit(history, now);
+    const r = annualizeShortHistory(trailing, history, 1, now);
+    expect(r).toBe(trailing);
+  });
+
+  it('leaves the manual amount and the pocket per period alone', () => {
+    const history = monthly(9.38, 3, 9);
+    expect(calcAssetAnnualIncomePerUnit({ ...fund, paymentPerUnitSource: 'manual', paymentPerUnit: 50 }, 'year', history, now).annualIncome).toBe(50);
+    expect(calcAssetAnnualIncomePerUnit(fund, 'period', history, now).annualIncome).toBeCloseTo(9.38 * 12);
   });
 });

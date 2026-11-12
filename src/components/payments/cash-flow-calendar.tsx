@@ -14,6 +14,7 @@ const BASIS_LABEL: Record<ProjectedPayment['basis'], string> = {
   forecast: 'прогноз',
   scheduled: 'ожидается',
   'last-year': 'как год назад',
+  average: 'средняя выплата',
   'last-payout': 'как последняя выплата',
   fixed: 'ваша сумма',
 };

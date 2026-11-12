@@ -14,7 +14,9 @@ import type { CalculatedAssetStats } from './portfolio-calculator';
  *   1. forecasts (`isForecast`, e.g. dohod.ru) and records already dated in the future;
  *   2. otherwise the last year repeats: each payment of the trailing 12 months
  *      recurs one year later ('year' spread) or the latest payout recurs every
- *      period ('period' spread);
+ *      period ('period' spread). A security paying for less than a year has fewer
+ *      payments to repeat than its frequency: the missing ones continue its rhythm
+ *      at the average payout;
  *   3. manual per-unit income is spread evenly over the frequency.
  * Quantities are the current ones — the history answers "what would my current
  * portfolio have paid", not "what did I receive".
@@ -40,10 +42,12 @@ export interface ProjectedPayment {
  * scheduled — a real record already dated in the future (MOEX, typed in by hand),
  *   stage unknown too;
  * last-year — last year's payment repeated;
+ * average — a security paying for less than a year: its average payout keeps the
+ *   rhythm until last year's payments can be repeated;
  * last-payout — the latest self-recorded payout repeated every period;
  * fixed — the user's own amount, spread over the frequency.
  */
-export type ProjectionBasis = 'forecast' | 'scheduled' | 'last-year' | 'last-payout' | 'fixed';
+export type ProjectionBasis = 'forecast' | 'scheduled' | 'last-year' | 'average' | 'last-payout' | 'fixed';
 
 export interface MonthBucket {
   /** 0–11, calendar month */
@@ -154,6 +158,20 @@ function futurePaymentsFor(asset: Asset, history: PaymentHistory[], now: Date, h
         if (date > horizon) break;
         if (date <= now) continue;
         if (!isCovered(date)) out.push({ amount: p.amount, date, estimated: false, basis: 'last-year' });
+      }
+    }
+    // A history shorter than a year (annualized income) has fewer payments to repeat than the
+    // frequency: the missing ones follow the latest payout, one period apart, at the average
+    // payout, and end where last year's repeats begin — so the year adds up to the yearly income.
+    const current = calcAssetAnnualIncomePerUnit(asset, 'year', past, now);
+    if (current.annualized) {
+      const { frequencyPerYear, payouts, averagePayout } = current.annualized;
+      const missing = Math.round(frequencyPerYear) - payouts;
+      const last = current.usedPayments[0].date;
+      for (let k = 1; k <= missing; k++) {
+        const date = addMonths(last, Math.round((k * 12) / frequencyPerYear));
+        if (date <= now || date > horizon) continue;
+        if (!isCovered(date)) out.push({ amount: averagePayout, date, estimated: false, basis: 'average' });
       }
     }
   } else {

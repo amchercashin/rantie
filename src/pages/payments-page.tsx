@@ -73,7 +73,7 @@ export function PaymentsPage() {
             <div key="calendar" className="animate-[hi-fade-slide-up_0.4s_var(--hi-ease-out)_both]">
               <CashFlowCalendar buckets={buckets} assetsById={assetsById} />
               <p className="mt-4 px-1 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
-                {taxed ? 'Суммы после НДФЛ' : 'Суммы до НДФЛ (ставка не задана в настройках)'} для текущего количества бумаг. Дивиденды — по прогнозам dohod.ru, иначе как год назад; аренда и вклады — как последняя выплата или ваша сумма.
+                {taxed ? 'Суммы после НДФЛ' : 'Суммы до НДФЛ (ставка не задана в настройках)'} для текущего количества бумаг. Дивиденды — по прогнозам dohod.ru, иначе как год назад, а у бумаг, что платят меньше года, — по средней выплате; аренда и вклады — как последняя выплата или ваша сумма.
               </p>
             </div>
           ) : (

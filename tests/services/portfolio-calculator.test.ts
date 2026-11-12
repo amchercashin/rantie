@@ -172,4 +172,68 @@ describe('portfolio-calculator', () => {
     expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(87);
     expect(snapshot.portfolio.totalIncomePerMonth).toBeCloseTo(7.25);
   });
+  describe('NDFL rate of an account inside a category', () => {
+    const base = {
+      assets: [asset({ id: 1, currentPrice: 100, paymentPerUnit: 12, paymentPerUnitSource: 'manual' as const })],
+      paymentHistory: [],
+      ndflRates: new Map([['Акции', 13]]),
+      exchangeRates: new Map<string, number>(),
+      now: new Date('2026-04-28'),
+    };
+
+    it('overrides the category rate for the holdings of that account, weighted by quantity', () => {
+      const snapshot = calculatePortfolioSnapshot({
+        ...base,
+        holdings: [holding({ id: 1, accountId: 1, quantity: 40 }), holding({ id: 2, accountId: 2, quantity: 10 })],
+        accountNdflRates: new Map([[2, new Map([['Акции', 0]])]]),
+      });
+
+      // 40 × 12 × 0.87 + 10 × 12 = 537.6 a year
+      expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(537.6);
+      const stats = snapshot.assetsById.get(1)!;
+      expect(stats.taxMultiplier).toBeCloseTo(0.896);
+      expect(stats.taxed).toBe(true);
+    });
+
+    it('an account at 0% makes its income gross, and every level says so', () => {
+      const snapshot = calculatePortfolioSnapshot({
+        ...base,
+        holdings: [holding({ accountId: 2, quantity: 10 })],
+        accountNdflRates: new Map([[2, new Map([['Акции', 0]])]]),
+      });
+
+      expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(120);
+      expect(snapshot.assetsById.get(1)!.taxed).toBe(false);
+      expect(snapshot.categories[0].taxed).toBe(false);
+      expect(snapshot.portfolio.taxed).toBe(false);
+    });
+
+    it('an account rate taxes income even when the category is at 0%', () => {
+      const snapshot = calculatePortfolioSnapshot({
+        ...base,
+        ndflRates: new Map([['Акции', 0]]),
+        holdings: [holding({ accountId: 3, quantity: 10 })],
+        accountNdflRates: new Map([[3, new Map([['Акции', 4]])]]),
+      });
+
+      expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(115.2);
+      expect(snapshot.categories[0].taxed).toBe(true);
+      expect(snapshot.portfolio.taxed).toBe(true);
+    });
+
+    it('a rate set for another category of the account does not apply', () => {
+      const snapshot = calculatePortfolioSnapshot({
+        ...base,
+        holdings: [holding({ accountId: 2, quantity: 10 })],
+        accountNdflRates: new Map([[2, new Map([['Облигации', 0]])]]),
+      });
+      expect(snapshot.assetsById.get(1)!.taxMultiplier).toBeCloseTo(0.87);
+    });
+
+    it('without account rates the category rate decides, as before', () => {
+      const snapshot = calculatePortfolioSnapshot({ ...base, holdings: [holding({ quantity: 10 })] });
+      expect(snapshot.assetsById.get(1)!.taxMultiplier).toBeCloseTo(0.87);
+      expect(snapshot.portfolio.taxed).toBe(true);
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FORECAST_HORIZON_MONTHS,
+  capitalPath,
   describeWait,
   forecastYieldPercent,
   goalDate,
@@ -71,6 +72,32 @@ describe('incomePath', () => {
 
   it('is capped at the horizon', () => {
     expect(incomePath({ ...demo, months: 10_000 })).toHaveLength(FORECAST_HORIZON_MONTHS + 1);
+  });
+});
+
+describe('capitalPath', () => {
+  it('adds every payout reinvested and every top-up to today’s capital', () => {
+    const input = { ...demo, monthly: 50_000, yearly: 200_000, months: 13 };
+    const income = incomePath(input);
+    const capital = capitalPath({ ...input, capital: 7_400_000 });
+    expect(capital).toHaveLength(14);
+    expect(capital[0]).toBe(7_400_000);
+    expect(capital[1]).toBeCloseTo(7_400_000 + income[0] + 50_000, 6);
+    expect(capital[12] - capital[11]).toBeCloseTo(income[11] + 50_000 + 200_000, 6);
+  });
+
+  it('pays exactly the monthly rate on the capital when today’s income does', () => {
+    const r = Math.pow(1.076, 1 / 12) - 1;
+    const input = { incomePerMonth: 7_400_000 * r, yieldPercent: 7.6, monthly: 30_000, months: 60 };
+    const income = incomePath(input);
+    const capital = capitalPath({ ...input, capital: 7_400_000 });
+    for (const m of [1, 12, 59, 60]) expect(capital[m] * r).toBeCloseTo(income[m], 6);
+  });
+
+  it('grows the capital by the top-ups even when the portfolio pays nothing yet', () => {
+    const capital = capitalPath({ incomePerMonth: 0, yieldPercent: 8, capital: 0, monthly: 10_000, months: 2 });
+    expect(capital).toEqual([0, 10_000, expect.any(Number)]);
+    expect(capital[2]).toBeGreaterThan(20_000);
   });
 });
 

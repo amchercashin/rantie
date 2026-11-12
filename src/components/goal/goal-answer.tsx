@@ -73,6 +73,15 @@ export function GoalAnswer({ goalPerMonth, now = new Date(), ...scenario }: Goal
   }
 
   const months = scenarioMonths({ ...scenario, goalPerMonth });
+  // Nothing paid yet and nothing put in: there is nothing to grow, so no date to promise.
+  if (!(scenario.incomePerMonth > 0) && !months.hasTopUps) {
+    return (
+      <p className={`${caption} px-2 py-3 text-center text-[var(--hi-text-2)]`}>
+        Пока портфель ничего не приносит — расти нечему. Добавьте активы или задайте пополнения ниже, и прогноз покажет, когда
+        доход дойдёт до цели.
+      </p>
+    );
+  }
   const main = months.hasTopUps ? months.with : months.without;
   const yearOf = (m: number) => goalDate(m, now).getFullYear();
   const later = now.getFullYear() + FORECAST_HORIZON_MONTHS / 12;
@@ -96,11 +105,13 @@ export function GoalAnswer({ goalPerMonth, now = new Date(), ...scenario }: Goal
         </span>
       </p>
       <p className={`${caption} mt-3 border-t border-[var(--hi-line)] pt-3 text-[var(--hi-text-3)]`}>
-        {months.hasTopUps
-          ? months.without != null
-            ? `Без пополнений — в ${yearOf(months.without)} году, ${describeWait(months.without)}.`
-            : 'Без пополнений — больше чем через 50 лет.'
-          : 'Пополнения ускорят — задайте их ниже.'}
+        {!months.hasTopUps
+          ? 'Пополнения ускорят — задайте их ниже.'
+          : !(scenario.incomePerMonth > 0)
+            ? 'Без пополнений доход не появится: портфель пока ничего не приносит.'
+            : months.without != null
+              ? `Без пополнений — в ${yearOf(months.without)} году, ${describeWait(months.without)}.`
+              : 'Без пополнений — больше чем через 50 лет.'}
       </p>
     </div>
   );

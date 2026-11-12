@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { ChevronDown, Plus, TrendingUp } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { Card, Section } from '@/components/ds/surface';
 import { Segmented } from '@/components/ds/segmented';
@@ -19,7 +19,11 @@ import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { goalProgress, setGoalPlan, setIncomeGoal, type GoalPlan } from '@/services/income-goal';
 import { forecastYieldPercent } from '@/services/goal-forecast';
 import type { CalculatedAssetStats } from '@/services/portfolio-calculator';
-import { formatIncome, formatPercent } from '@/lib/utils';
+import { cn, formatIncome, formatPercent } from '@/lib/utils';
+import { readStorage, writeStorage } from '@/lib/safe-storage';
+
+/** The forecast is folded until the user opens it once; then it stays open on later visits. */
+const FORECAST_OPEN_KEY = 'rt-goal-forecast-open';
 
 /**
  * Writes run half a second after the last keystroke and at once when the page is left: every write
@@ -70,7 +74,7 @@ export function GoalPage() {
   const ready = !stats.isLoading && goal !== undefined && plan !== undefined;
 
   return (
-    <AppShell back="/" title="Цель" subtitle="Когда доход портфеля дойдёт до цели">
+    <AppShell back="/" title="Цель" subtitle="Сколько нужно в месяц, чтобы жить на доход с капитала">
       {ready && <GoalPlanner stats={stats} goal={goal} initialGoal={goal} initialPlan={plan} />}
     </AppShell>
   );
@@ -96,6 +100,7 @@ function GoalPlanner({ stats, goal, initialGoal, initialPlan }: GoalPlannerProps
   const [yearlyDraft, setYearlyDraft] = useState(() => draftOf(initialPlan.yearly));
   const [yearlyOpen, setYearlyOpen] = useState(initialPlan.yearly > 0);
   const [ownYield, setOwnYield] = useState(initialPlan.customYield != null);
+  const [forecastOpen, setForecastOpen] = useState(() => readStorage(FORECAST_OPEN_KEY) === '1');
   const [yieldDraft, setYieldDraft] = useState(() =>
     initialPlan.customYield != null ? yieldDraftOf(initialPlan.customYield) : '',
   );
@@ -116,7 +121,14 @@ function GoalPlanner({ stats, goal, initialGoal, initialPlan }: GoalPlannerProps
   const ownYieldValue = parseDecimal(yieldDraft);
   const yieldPercent = useOwnYield ? (Number.isFinite(ownYieldValue) ? ownYieldValue : null) : portfolioYield;
   const progress = goalPerMonth != null ? goalProgress(income, goalPerMonth, 'month') : null;
-  const showForecast = goalPerMonth != null && income < goalPerMonth && yieldPercent != null && yieldPercent > 0;
+  const showChart =
+    goalPerMonth != null && income < goalPerMonth && yieldPercent != null && yieldPercent > 0 && (income > 0 || monthly > 0 || yearly > 0);
+
+  const toggleForecast = () => {
+    const next = !forecastOpen;
+    setForecastOpen(next);
+    writeStorage(FORECAST_OPEN_KEY, next ? '1' : null);
+  };
 
   const changeGoal = (draft: string) => {
     setGoalDraft(draft);
@@ -214,109 +226,142 @@ function GoalPlanner({ stats, goal, initialGoal, initialPlan }: GoalPlannerProps
         )}
       </Card>
 
-      <Card glow className="mt-4 px-4 pt-5 pb-3">
-        <GoalAnswer
-          goalPerMonth={goalPerMonth}
-          incomePerMonth={income}
-          yieldPercent={yieldPercent}
-          monthly={monthly}
-          yearly={yearly}
-        />
-        {showForecast && (
-          <div className="mt-5">
-            <GoalForecastChart
-              goalPerMonth={goalPerMonth}
-              incomePerMonth={income}
-              yieldPercent={yieldPercent}
-              monthly={monthly}
-              yearly={yearly}
-            />
-          </div>
-        )}
-      </Card>
-
-      <Section title="Доходность" className="mt-8">
-        {portfolioYield != null && (
-          <Segmented
-            ariaLabel="Доходность для прогноза"
-            className="w-full"
-            value={useOwnYield ? 'own' : 'portfolio'}
-            onChange={changeYieldMode}
-            options={[
-              { value: 'portfolio', label: `Текущая · ${formatPercent(portfolioYield)}` },
-              { value: 'own', label: 'Своя' },
-            ]}
-          />
-        )}
-        {useOwnYield && (
-          <Field label="Своя доходность в год, после НДФЛ" htmlFor="goal-yield" className="mt-4">
-            <TextInput
-              id="goal-yield"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="8"
-              value={yieldDraft}
-              suffix="%"
-              onChange={(e) => changeYield(e.target.value)}
-              onBlur={flush}
-              onKeyDown={blurOnEnter}
-            />
-          </Field>
-        )}
-        <p className="mt-2 px-1 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
-          {portfolioYield == null
-            ? 'Стоимость портфеля неизвестна, поэтому текущей доходности нет — укажите свою.'
-            : useOwnYield
-              ? 'Попробуйте разные цифры: например, ставку вклада за вычетом налога. Текущая вернётся одним нажатием.'
-              : `Доход за последние 12 месяцев после НДФЛ ÷ капитал.${unpricedIncome ? ' Активы без цены не учтены.' : ''}`}
-        </p>
-      </Section>
-
-      <Section title="Пополнения" className="mt-8">
-        <MoneyField
-          id="goal-monthly"
-          label="Каждый месяц"
-          placeholder="0"
-          value={monthlyDraft}
-          onChange={changeMonthly}
-          onBlur={flush}
-          hint="Сколько готовы докладывать в портфель"
-        />
-        {yearlyOpen ? (
-          <MoneyField
-            id="goal-yearly"
-            label="Раз в год, дополнительно"
-            className="mt-4"
-            placeholder="0"
-            value={yearlyDraft}
-            onChange={changeYearly}
-            onBlur={flush}
-            hint={
-              <span className="flex items-baseline justify-between gap-3">
-                <span>Премия, вычет — в конце каждого года</span>
-                <button type="button" onClick={removeYearly} className="hi-pressable shrink-0 font-semibold text-[var(--hi-gold)]">
-                  Убрать
-                </button>
-              </span>
-            }
-          />
-        ) : (
+      {goalPerMonth != null && (
+        <section className="mt-4">
           <button
             type="button"
-            onClick={() => setYearlyOpen(true)}
-            className="hi-pressable mt-3 inline-flex items-center gap-1.5 px-1 py-1 text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-gold)]"
+            aria-expanded={forecastOpen}
+            aria-controls="goal-forecast"
+            onClick={toggleForecast}
+            className="hi-pressable flex w-full items-center gap-3 rounded-[22px] border border-[var(--hi-line)] bg-[var(--hi-surface)] px-4 py-3.5 text-left active:bg-[var(--hi-raised)]"
           >
-            <Plus className="size-4" /> Раз в год, дополнительно
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--hi-gold-tint)] text-[var(--hi-gold)]">
+              <TrendingUp className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[length:var(--hi-text-body)] font-semibold text-[var(--hi-text)]">
+                Когда портфель оплатит цель
+              </span>
+              <span className="mt-0.5 block text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
+                Прогноз с реинвестированием и пополнениями
+              </span>
+            </span>
+            <ChevronDown
+              aria-hidden="true"
+              className={cn('size-5 shrink-0 text-[var(--hi-text-3)] transition-transform duration-300', forecastOpen && 'rotate-180')}
+            />
           </button>
-        )}
-      </Section>
 
-      <div className="mt-8 flex items-start gap-2 px-1">
-        <p className="min-w-0 flex-1 pt-1.5 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
-          Прогноз — ориентир, а не обещание. Все выплаты реинвестируются с той же доходностью, суммы — в сегодняшних деньгах.
-        </p>
-        <InfoLink section="goal" label="Как считается прогноз — в «Как устроен Рантье»" />
-      </div>
+          {forecastOpen && (
+            <div id="goal-forecast" className="animate-[hi-fade-slide-down_0.35s_var(--hi-ease-out)_both]">
+              <Card glow className="mt-3 px-4 pt-5 pb-3">
+                <GoalAnswer
+                  goalPerMonth={goalPerMonth}
+                  incomePerMonth={income}
+                  yieldPercent={yieldPercent}
+                  monthly={monthly}
+                  yearly={yearly}
+                />
+                {showChart && (
+                  <div className="mt-5">
+                    <GoalForecastChart
+                      goalPerMonth={goalPerMonth}
+                      capital={portfolio.totalValue}
+                      incomePerMonth={income}
+                      yieldPercent={yieldPercent}
+                      monthly={monthly}
+                      yearly={yearly}
+                    />
+                  </div>
+                )}
+              </Card>
+
+              <Section title="Доходность" className="mt-8">
+                {portfolioYield != null && (
+                  <Segmented
+                    ariaLabel="Доходность для прогноза"
+                    className="w-full"
+                    value={useOwnYield ? 'own' : 'portfolio'}
+                    onChange={changeYieldMode}
+                    options={[
+                      { value: 'portfolio', label: `Текущая · ${formatPercent(portfolioYield)}` },
+                      { value: 'own', label: 'Своя' },
+                    ]}
+                  />
+                )}
+                {useOwnYield && (
+                  <Field label="Своя доходность в год, после НДФЛ" htmlFor="goal-yield" className="mt-4">
+                    <TextInput
+                      id="goal-yield"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="8"
+                      value={yieldDraft}
+                      suffix="%"
+                      onChange={(e) => changeYield(e.target.value)}
+                      onBlur={flush}
+                      onKeyDown={blurOnEnter}
+                    />
+                  </Field>
+                )}
+                <p className="mt-2 px-1 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
+                  {portfolioYield == null
+                    ? 'Стоимость портфеля неизвестна, поэтому текущей доходности нет — укажите свою.'
+                    : useOwnYield
+                      ? 'Попробуйте разные цифры: например, ставку вклада за вычетом налога. Текущая вернётся одним нажатием.'
+                      : `Доход за последние 12 месяцев после НДФЛ ÷ капитал.${unpricedIncome ? ' Активы без цены не учтены.' : ''}`}
+                </p>
+              </Section>
+
+              <Section title="Пополнения" className="mt-8">
+                <MoneyField
+                  id="goal-monthly"
+                  label="Каждый месяц"
+                  placeholder="0"
+                  value={monthlyDraft}
+                  onChange={changeMonthly}
+                  onBlur={flush}
+                  hint="Сколько готовы докладывать в портфель"
+                />
+                {yearlyOpen ? (
+                  <MoneyField
+                    id="goal-yearly"
+                    label="Раз в год, дополнительно"
+                    className="mt-4"
+                    placeholder="0"
+                    value={yearlyDraft}
+                    onChange={changeYearly}
+                    onBlur={flush}
+                    hint={
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span>Премия, вычет — в конце каждого года</span>
+                        <button type="button" onClick={removeYearly} className="hi-pressable shrink-0 font-semibold text-[var(--hi-gold)]">
+                          Убрать
+                        </button>
+                      </span>
+                    }
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setYearlyOpen(true)}
+                    className="hi-pressable mt-3 inline-flex items-center gap-1.5 px-1 py-1 text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-gold)]"
+                  >
+                    <Plus className="size-4" /> Раз в год, дополнительно
+                  </button>
+                )}
+              </Section>
+
+              <div className="mt-8 flex items-start gap-2 px-1">
+                <p className="min-w-0 flex-1 pt-1.5 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
+                  Прогноз — ориентир, а не обещание. Все выплаты реинвестируются с той же доходностью, суммы — в сегодняшних деньгах.
+                </p>
+                <InfoLink section="goal" label="Как считается прогноз — в «Как устроен Рантье»" />
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {goal != null && (
         <Button variant="ghost" size="md" block className="mt-6" onClick={removeGoal}>

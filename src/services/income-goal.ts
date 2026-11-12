@@ -6,10 +6,10 @@
 import { db } from '@/db/database';
 import { plural } from '@/lib/utils';
 
-const GOAL_KEY = 'income-goal-month';
+export const INCOME_GOAL_KEY = 'income-goal-month';
 
 export async function getIncomeGoal(): Promise<number | null> {
-  const row = await db.settings.get(GOAL_KEY);
+  const row = await db.settings.get(INCOME_GOAL_KEY);
   if (!row) return null;
   const value = Number(row.value);
   return Number.isFinite(value) && value > 0 ? value : null;
@@ -18,10 +18,60 @@ export async function getIncomeGoal(): Promise<number | null> {
 /** Pass null to remove the goal. */
 export async function setIncomeGoal(perMonth: number | null): Promise<void> {
   if (perMonth == null || !Number.isFinite(perMonth) || perMonth <= 0) {
-    await db.settings.delete(GOAL_KEY);
+    await db.settings.delete(INCOME_GOAL_KEY);
     return;
   }
-  await db.settings.put({ key: GOAL_KEY, value: String(Math.round(perMonth)) });
+  await db.settings.put({ key: INCOME_GOAL_KEY, value: String(Math.round(perMonth)) });
+}
+
+/**
+ * The plan on the goal page: top-ups and, optionally, a yield of one's own to forecast with.
+ * Kept in `settings` next to the goal, so it travels with the backup too.
+ */
+export interface GoalPlan {
+  /** Top-up every month, RUB; 0 = none. */
+  monthly: number;
+  /** Extra top-up once a year, RUB; 0 = none. */
+  yearly: number;
+  /** Net yield per year, %, the user chose; null = the portfolio's own. */
+  customYield: number | null;
+}
+
+const PLAN_MONTHLY_KEY = 'goal-plan-monthly';
+const PLAN_YEARLY_KEY = 'goal-plan-yearly';
+const PLAN_YIELD_KEY = 'goal-plan-yield';
+
+function storedNumber(row: { value: string } | undefined): number | null {
+  if (!row) return null;
+  const value = Number(row.value);
+  return Number.isFinite(value) ? value : null;
+}
+
+export async function getGoalPlan(): Promise<GoalPlan> {
+  const [monthly, yearly, customYield] = await db.settings.bulkGet([PLAN_MONTHLY_KEY, PLAN_YEARLY_KEY, PLAN_YIELD_KEY]);
+  return {
+    monthly: Math.max(0, storedNumber(monthly) ?? 0),
+    yearly: Math.max(0, storedNumber(yearly) ?? 0),
+    customYield: storedNumber(customYield),
+  };
+}
+
+/** Saves only the fields passed. A top-up of 0 and a yield of null remove the setting. */
+export async function setGoalPlan(patch: Partial<GoalPlan>): Promise<void> {
+  const amount = async (key: string, value: number | undefined) => {
+    if (value === undefined) return;
+    if (Number.isFinite(value) && value > 0) await db.settings.put({ key, value: String(Math.round(value)) });
+    else await db.settings.delete(key);
+  };
+  await db.transaction('rw', db.settings, async () => {
+    await amount(PLAN_MONTHLY_KEY, patch.monthly);
+    await amount(PLAN_YEARLY_KEY, patch.yearly);
+    if (patch.customYield !== undefined) {
+      const y = patch.customYield;
+      if (y != null && Number.isFinite(y)) await db.settings.put({ key: PLAN_YIELD_KEY, value: String(Math.round(y * 100) / 100) });
+      else await db.settings.delete(PLAN_YIELD_KEY);
+    }
+  });
 }
 
 export interface GoalProgress {

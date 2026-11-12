@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Pencil, Target } from 'lucide-react';
+import { Check, ChevronRight, Target } from 'lucide-react';
 import { goalProgress, type GoalProgress } from '@/services/income-goal';
 import { NBSP, cn, formatCurrencyFull, formatIncome } from '@/lib/utils';
 import type { IncomePeriod } from '@/components/main/income-hero';
@@ -59,18 +59,19 @@ interface GoalPathProps {
   goalPerMonth: number | null | undefined;
   mode: IncomePeriod;
   animate?: boolean;
-  onEdit: () => void;
+  /** Opens the goal page: the goal, the forecast and the plan. */
+  onOpen: () => void;
 }
 
 /** The lower half of the hero summary card: the way to the goal, or an invitation to set one. */
-export function GoalPath({ incomePerMonth, goalPerMonth, mode, animate = false, onEdit }: GoalPathProps) {
+export function GoalPath({ incomePerMonth, goalPerMonth, mode, animate = false, onOpen }: GoalPathProps) {
   if (incomePerMonth == null || goalPerMonth === undefined) return null;
 
   if (goalPerMonth == null) {
     return (
       <button
         type="button"
-        onClick={onEdit}
+        onClick={onOpen}
         className="hi-pressable flex w-full items-center justify-center gap-2 px-4 py-3 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)] active:bg-[var(--hi-raised)]"
       >
         <Target className="size-4 shrink-0 text-[var(--hi-gold)]" />
@@ -88,13 +89,13 @@ export function GoalPath({ incomePerMonth, goalPerMonth, mode, animate = false, 
   return (
     <button
       type="button"
-      onClick={onEdit}
-      aria-label={`Цель ${goalText}: пройдено ${progress.percent}%. Изменить цель`}
+      onClick={onOpen}
+      aria-label={`Цель ${goalText}: пройдено ${progress.percent}%. Открыть цель и прогноз`}
       className="hi-pressable block w-full px-4 pt-3.5 pb-4 text-center active:bg-[var(--hi-raised)]"
     >
       <div className="hi-eyebrow inline-flex items-center justify-center gap-1.5">
         <span>Цель{NBSP}·{NBSP}{goalText}</span>
-        <Pencil aria-hidden="true" className="size-3 opacity-70" />
+        <ChevronRight aria-hidden="true" className="size-3.5 opacity-70" />
       </div>
 
       <div className="mt-1 flex items-baseline justify-center gap-1.5">

@@ -1,6 +1,7 @@
 import { db } from '@/db/database';
 import type { Asset, DataSource, PaymentHistory } from '@/models/types';
 import { deleteAccount } from '@/hooks/use-accounts';
+import { INCOME_GOAL_KEY } from '@/services/income-goal';
 
 /**
  * A realistic sample portfolio to explore the app without entering data.
@@ -9,6 +10,10 @@ import { deleteAccount } from '@/hooks/use-accounts';
  */
 export const DEMO_ACCOUNT_SETTING = 'demo-account-id';
 export const DEMO_ACCOUNT_NAME = 'Демо-портфель';
+/** Goal the demo brings along when the user has none, so the goal and its forecast can be seen. */
+export const DEMO_GOAL_PER_MONTH = 100_000;
+/** Remembers the goal the demo set — removing the demo takes it away only while it is unchanged. */
+const DEMO_GOAL_SETTING = 'demo-goal';
 
 interface DemoAsset {
   asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>;
@@ -142,6 +147,10 @@ export async function loadDemoPortfolio(now: Date = new Date()): Promise<number>
     }
 
     await db.settings.put({ key: DEMO_ACCOUNT_SETTING, value: String(accountId) });
+    if (!(await db.settings.get(INCOME_GOAL_KEY))) {
+      await db.settings.put({ key: INCOME_GOAL_KEY, value: String(DEMO_GOAL_PER_MONTH) });
+      await db.settings.put({ key: DEMO_GOAL_SETTING, value: String(DEMO_GOAL_PER_MONTH) });
+    }
     return accountId;
   });
 }
@@ -149,5 +158,13 @@ export async function loadDemoPortfolio(now: Date = new Date()): Promise<number>
 export async function removeDemoPortfolio(): Promise<void> {
   const id = await getDemoAccountId();
   if (id != null) await deleteAccount(id);
-  await db.settings.delete(DEMO_ACCOUNT_SETTING);
+  await db.transaction('rw', db.settings, async () => {
+    await db.settings.delete(DEMO_ACCOUNT_SETTING);
+    const demoGoal = await db.settings.get(DEMO_GOAL_SETTING);
+    if (demoGoal) {
+      const goal = await db.settings.get(INCOME_GOAL_KEY);
+      if (goal?.value === demoGoal.value) await db.settings.delete(INCOME_GOAL_KEY);
+      await db.settings.delete(DEMO_GOAL_SETTING);
+    }
+  });
 }

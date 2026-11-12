@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useMemo, useState, type PointerEvent } from 'react';
+import { useElementWidth } from '@/hooks/use-element-width';
 import type { TimelinePoint } from '@/services/income-projection';
 import { Card } from '@/components/ds/surface';
 import { Badge } from '@/components/ds/badge';
@@ -22,21 +23,6 @@ function monthLabel(date: Date): string {
   return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-function useWidth<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [width, setWidth] = useState(340);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return { ref, width };
-}
-
 function linePath(coords: [number, number][]): string {
   return coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join('');
 }
@@ -46,7 +32,7 @@ function linePath(coords: [number, number][]): string {
  * (solid) and the next twelve months of forecast (dashed). Scrub to inspect.
  */
 export function IncomeDynamicsChart({ points, mode, animate = true }: IncomeDynamicsChartProps) {
-  const { ref, width } = useWidth<HTMLDivElement>();
+  const { ref, width } = useElementWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
   const k = mode === 'year' ? 12 : 1;
 

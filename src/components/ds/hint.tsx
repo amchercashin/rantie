@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { Lightbulb, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isHintDismissed, dismissHint } from '@/lib/hints';
+import type { GuideSectionId } from '@/lib/guide';
+import { InfoLink } from './info-link';
 
 interface HintProps {
   /** Storage id; once dismissed the hint never comes back (until hints are reset in settings). */
@@ -9,14 +11,17 @@ interface HintProps {
   title?: ReactNode;
   children: ReactNode;
   icon?: ReactNode;
+  /** Section of «Как устроен Рантье» with the full story: adds an «i» in the bottom-right corner. */
+  more?: GuideSectionId;
   className?: string;
 }
 
 /**
  * Inline, in-flow coach mark. Replaces coordinate-based spotlights:
  * it never covers content and cannot be mispositioned.
+ * Keep the text a short version of the guide section it links to (`more`).
  */
-export function Hint({ id, title, children, icon, className }: HintProps) {
+export function Hint({ id, title, children, icon, more, className }: HintProps) {
   const [hidden, setHidden] = useState(() => isHintDismissed(id));
   const [leaving, setLeaving] = useState(false);
   if (hidden) return null;
@@ -32,6 +37,8 @@ export function Hint({ id, title, children, icon, className }: HintProps) {
       role="note"
       className={cn(
         'relative flex gap-3 rounded-[20px] border border-[rgba(217,192,142,0.18)] p-4 pr-11',
+        // ✕ in the top corner and «i» in the bottom one share the right gutter: room for both.
+        more && 'min-h-[88px]',
         'bg-[linear-gradient(135deg,rgba(217,192,142,0.10),rgba(217,192,142,0.03))]',
         'transition-all duration-200',
         leaving ? 'opacity-0 -translate-y-1 scale-[0.98]' : 'animate-[hi-fade-slide-up_0.5s_var(--hi-ease-out)_both]',
@@ -53,6 +60,7 @@ export function Hint({ id, title, children, icon, className }: HintProps) {
       >
         <X className="size-4" />
       </button>
+      {more && <InfoLink section={more} className="absolute bottom-2 right-2" />}
     </div>
   );
 }

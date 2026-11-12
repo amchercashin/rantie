@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Lightbulb, Sparkles, Trash2, Upload } from 'lucide-react';
+import { BookOpen, Download, Lightbulb, Sparkles, Trash2, Upload } from 'lucide-react';
 import { withViewTransition } from '@/lib/view-transition';
 import { AppShell } from '@/components/layout/app-shell';
 import { Card, ListRow, Section } from '@/components/ds/surface';
@@ -12,6 +12,7 @@ import { downloadBackup } from '@/lib/download-backup';
 import { formatBackupAge, getLastBackupAt } from '@/lib/backup-reminder';
 import { removeDemoPortfolio } from '@/services/demo-portfolio';
 import { resetHints } from '@/lib/hints';
+import { guidePath } from '@/lib/guide';
 import { useDemoAccountId } from '@/hooks/use-demo';
 import { NdflSettings } from '@/components/settings/ndfl-settings';
 import { ExchangeRatesSettings } from '@/components/settings/exchange-rates-settings';
@@ -105,6 +106,13 @@ export function SettingsPage() {
       <Section title="Обучение">
         <Card className="overflow-hidden">
           <ListRow
+            leading={<RowIcon><BookOpen /></RowIcon>}
+            title="Как устроен Рантье"
+            subtitle="Источники, расчёт дохода, хранение"
+            chevron
+            onClick={() => withViewTransition(() => navigate(guidePath()), 'forward')}
+          />
+          <ListRow
             leading={<RowIcon><Lightbulb /></RowIcon>}
             title="Показать подсказки снова"
             subtitle="Приветствие и советы на экранах"
@@ -143,7 +151,7 @@ export function SettingsPage() {
         <Wordmark className="mt-3 text-[26px]" />
         <div className="mt-1.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">Капитал, который платит</div>
         <div className="mt-1 text-[length:var(--hi-text-micro)] text-[var(--hi-text-3)]">
-          Данные: Мосбиржа, dohod.ru · работает офлайн
+          Данные: Мосбиржа, dohod.ru, «Парус» · работает офлайн
         </div>
       </div>
     </AppShell>

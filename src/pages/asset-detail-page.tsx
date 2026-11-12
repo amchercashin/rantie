@@ -12,6 +12,8 @@ import { SourceBadge } from '@/components/ds/badge';
 import { BottomSheet } from '@/components/ds/bottom-sheet';
 import { Button } from '@/components/ds/button';
 import { Hint } from '@/components/ds/hint';
+import { InfoLink } from '@/components/ds/info-link';
+import { SyncGlyph } from '@/components/ds/sync-glyph';
 import { MissingRateNotice } from '@/components/shared/missing-rate-notice';
 import { useAsset, updateAsset } from '@/hooks/use-assets';
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
@@ -124,7 +126,7 @@ export function AssetDetailPage() {
         />
       )}
 
-      <Section title="Как считать доход" className="mt-8">
+      <Section title="Как считать доход" className="mt-8" action={<InfoLink section="income-modes" className="-my-2 -mr-1 flex" />}>
         <Card className="overflow-hidden">
           <div className="px-4 pt-4">
             <Segmented
@@ -207,10 +209,15 @@ export function AssetDetailPage() {
         </Card>
       </Section>
 
-      <Hint id="asset-income-modes" className="mt-4" title="Два способа учесть доход">
-        {exchange
-          ? '«По выплатам» — сумма выплат бумаги за последние 12 месяцев с Мосбиржи и dohod.ru (если бумага платит меньше года — средняя выплата × частота), обновляется сама. «Своя сумма» — если знаете точнее, например объявлен новый дивиденд.'
-          : '«Своя сумма» — укажите, сколько приходит в месяц, и забудьте. «По выплатам» — записывайте каждое поступление во вкладке «Выплаты»: доход будет точным, но если забыть внести выплату, он упадёт.'}
+      <Hint id="asset-income-modes" className="mt-4" title="Два способа учесть доход" more="income-modes">
+        {exchange ? (
+          <>
+            «По выплатам» — сумма выплат бумаги за последние 12 месяцев из открытых источников, обновляется кнопкой <SyncGlyph /> на
+            «Доходе». «Своя сумма» — если знаете точнее: например, объявлен новый дивиденд или бумаги нет в источниках.
+          </>
+        ) : (
+          '«Своя сумма» — укажите, сколько приходит в месяц, и забудьте. «По выплатам» — записывайте каждое поступление во вкладке «Выплаты»: доход будет точным, но пропадёт, если забыть внести очередную выплату.'
+        )}
       </Hint>
 
       {next && (

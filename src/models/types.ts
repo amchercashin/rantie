@@ -1,4 +1,4 @@
-export type DataSource = 'moex' | 'dohod' | 'parus' | 'import' | 'manual';
+export type DataSource = 'moex' | 'dohod' | 'smartlab' | 'parus' | 'import' | 'manual';
 
 /** A row of the key–value `settings` table: tax rates, the income goal, sync timestamps, the demo account. */
 export interface AppSetting {
@@ -59,6 +59,8 @@ export interface PaymentHistory {
   type: 'dividend' | 'coupon' | 'rent' | 'interest' | 'distribution' | 'other';
   dataSource: DataSource;
   isForecast?: boolean;
+  /** A forecast the board of directors has already recommended (smart-lab). Only with `isForecast`. */
+  recommended?: boolean;
 }
 
 export interface ImportRecord {

@@ -151,7 +151,7 @@ export function SettingsPage() {
         <Wordmark className="mt-3 text-[26px]" />
         <div className="mt-1.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">Капитал, который платит</div>
         <div className="mt-1 text-[length:var(--hi-text-micro)] text-[var(--hi-text-3)]">
-          Данные: Мосбиржа, dohod.ru, «Парус» · работает офлайн
+          Данные: Мосбиржа, dohod.ru, smart-lab, «Парус» · работает офлайн
         </div>
       </div>
     </AppShell>

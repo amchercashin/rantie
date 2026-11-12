@@ -2,7 +2,7 @@ import Dexie from 'dexie';
 import { isExchangeTraded } from '@/models/asset-kind';
 import { db } from '@/db/database';
 import type { Asset, PaymentHistory, DataSource } from '@/models/types';
-import type { DividendHistoryRow, DividendResult, StockPriceResult, BondDataResult } from './moex-api';
+import type { DividendResult, StockPriceResult, BondDataResult } from './moex-api';
 import {
   resolveSecurityInfo,
   fetchBondData,
@@ -17,11 +17,15 @@ import {
   fetchDohodDividends,
   isDohodAvailable,
   isDohodIndexLoaded,
+  fetchSmartlabDividends,
+  isSmartlabAvailable,
+  isSmartlabIndexLoaded,
   isFundIndexLoaded,
   resetDohodCache,
   findFundKey,
   fetchFundDistributions,
 } from '@/services/heroincome-data';
+import { refineForecasts, smartlabAsMain, type SyncedDividendRow } from '@/services/smartlab-dividends';
 import { refreshExchangeRates } from '@/services/exchange-rates';
 import { markSynced } from '@/services/sync-state';
 
@@ -358,18 +362,21 @@ async function syncPayments(
     return warnings;
   }
 
-  const { dohodRows, divInfo } = await syncStockDividends(ra);
+  const { rows, divInfo, manualKept } = await syncStockDividends(ra, { keepManual: true });
+  if (manualKept) {
+    warnings.push(`${ticker}: выплаты нашлись в открытых источниках — ваши оставлены, ⟳ у бумаги на вкладке «Выплаты» заменит их`);
+  }
   const activeDates = await storedPaymentDates(ra.asset.id!);
 
   const frequencyPerYear = activeDates.length >= 2
     ? calcDividendFrequency(activeDates)
     : (divInfo?.summary.frequencyPerYear ?? undefined);
 
-  // nextExpectedCutoffDate: prefer dohod forecast, then MOEX
+  // nextExpectedCutoffDate: prefer the forecast of dohod.ru / smart-lab, then MOEX
   let nextExpectedCutoffDate: Date | undefined;
-  if (dohodRows) {
+  if (rows) {
     const now = new Date();
-    nextExpectedCutoffDate = dohodRows
+    nextExpectedCutoffDate = rows
       .filter((r) => r.isForecast && r.date > now)
       .sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date;
   }
@@ -377,7 +384,7 @@ async function syncPayments(
 
   if (frequencyPerYear != null) {
     await updateMoexAssetFields(ra.asset, { frequencyPerYear, nextExpectedCutoffDate });
-  } else if (activeDates.length === 0 && !dohodRows && !divInfo) {
+  } else if (activeDates.length === 0 && !rows && !divInfo) {
     warnings.push(`${ticker}: дивиденды не загружены`);
   }
 
@@ -386,11 +393,13 @@ async function syncPayments(
 
 // ============ Payment sources ============
 //
-// Payments of one security come from one source at a time: the preferred one (dohod.ru for
-// dividends, Parus via heroincome-data for fund distributions) or MOEX as a fallback. Rows of
-// two sources stored side by side would count every payment twice.
+// Payments of one security come from one source at a time: the preferred one (dohod.ru, then
+// smart-lab for dividends; Parus via heroincome-data for fund distributions) or MOEX as a
+// fallback. Rows of two sources stored side by side would count every payment twice. The one
+// exception is harmless: under dohod.ru, smart-lab may add forecasts (a board recommendation,
+// a cancellation) — forecasts never count as income.
 
-type PreferredSource = 'dohod' | 'parus';
+type PreferredSource = 'dohod' | 'smartlab' | 'parus';
 
 /**
  * What a payment sync of one security came to:
@@ -430,7 +439,7 @@ async function deleteStoredPayments(
 /** The preferred source answered: its rows replace whatever MOEX had given before. */
 async function writeFromPreferred(
   assetId: number,
-  rows: (DividendHistoryRow & { isForecast?: boolean })[],
+  rows: SyncedDividendRow[],
   type: PaymentHistory['type'],
   source: PreferredSource,
 ): Promise<void> {
@@ -439,49 +448,96 @@ async function writeFromPreferred(
 }
 
 /**
- * The preferred source gave nothing this time, so MOEX is next in line.
- * - Its rows are stored and it is merely unreachable (`dropped` is false: no index — offline,
- *   GitHub blocked — or one file failed to load): they stay as they are and MOEX is not asked.
- * - It no longer lists the security (`dropped`): MOEX takes over, and the old rows go only once
- *   MOEX has actually answered.
- * - Nothing of it is stored: plain fallback to MOEX.
+ * The preferred sources gave nothing this time, so MOEX is next in line.
+ * - Rows of one of them are stored and it is merely unreachable (`dropped` is false: no index —
+ *   offline, GitHub blocked — or one file failed to load): they stay as they are, MOEX is not asked.
+ * - A source no longer lists the security (`dropped`): MOEX takes over, and the old rows go only
+ *   once MOEX has actually answered.
+ * - Nothing of them is stored: plain fallback to MOEX.
  */
 async function writeFromMoex(
   ra: ResolvedAsset,
   type: PaymentHistory['type'],
-  preferred: PreferredSource,
-  dropped: boolean,
+  preferred: { source: PreferredSource; dropped: boolean }[],
 ): Promise<DividendResult | null> {
   const assetId = ra.asset.id!;
-  const hasPreferredRows = (await storedPayments(assetId)).some((r) => r.type === type && r.dataSource === preferred);
-  if (hasPreferredRows && !dropped) return null;
+  const stored = await storedPayments(assetId);
+  const hasRows = (source: PreferredSource) => stored.some((r) => r.type === type && r.dataSource === source);
+  if (preferred.some((p) => hasRows(p.source) && !p.dropped)) return null;
 
   const divInfo = await fetchDividends(ra.secid);
   if (divInfo) {
-    if (hasPreferredRows) await deleteStoredPayments(assetId, type, preferred);
+    for (const p of preferred) if (hasRows(p.source)) await deleteStoredPayments(assetId, type, p.source);
     await writePaymentHistory(assetId, divInfo.history, type, 'moex');
   }
   return divInfo;
 }
 
-/** Stock dividends: dohod.ru first, MOEX as a fallback. */
-async function syncStockDividends(ra: ResolvedAsset): Promise<{
-  dohodRows: Awaited<ReturnType<typeof fetchDohodDividends>>;
+/**
+ * Stock dividends: dohod.ru first; smart-lab when dohod.ru has nothing for the security; MOEX last.
+ * Under dohod.ru smart-lab only refines the upcoming dividends (`refineForecasts`): a board
+ * recommendation marks or replaces the forecast, a cancellation removes it.
+ * `rows` — what was written (null when no preferred source gave rows).
+ *
+ * `keepManual` (a full sync): a stock whose payments the user typed in — the advice for a stock
+ * with no source, until smart-lab covered many of them — keeps them, and the source is not written
+ * next to them: both would count. `manualKept` says so; ⟳ on the security replaces them with consent.
+ */
+async function syncStockDividends(ra: ResolvedAsset, { keepManual }: { keepManual: boolean }): Promise<{
+  rows: SyncedDividendRow[] | null;
   divInfo: DividendResult | null;
   outcome: PaymentsOutcome;
+  manualKept?: boolean;
 }> {
+  const assetId = ra.asset.id!;
   const ticker = ra.asset.ticker ?? ra.secid;
-  const covered = await isDohodAvailable(ticker);
-  const dohodRows = covered ? await fetchDohodDividends(ticker) : null;
+  const now = new Date();
+  const dohodListed = await isDohodAvailable(ticker);
+  const dohodRows = dohodListed ? await fetchDohodDividends(ticker) : null;
+  const smartlabListed = await isSmartlabAvailable(ticker);
+  const smartlabRows = smartlabListed ? await fetchSmartlabDividends(ticker) : null;
+  const stored = await storedPayments(assetId);
+  const hasStored = (source: DataSource) => stored.some((r) => r.type === 'dividend' && r.dataSource === source);
+  // The source would be written for the first time next to the user's own payments.
+  const keepsManual = (source: PreferredSource) => keepManual && hasStored('manual') && !hasStored(source);
+  const manualKept = { rows: null, divInfo: null, outcome: 'no-source' as const, manualKept: true };
 
-  if (dohodRows) {
-    await writeFromPreferred(ra.asset.id!, dohodRows, 'dividend', 'dohod');
-    return { dohodRows, divInfo: null, outcome: dohodRows.length > 0 ? 'loaded' : 'no-source' };
+  if (dohodRows && dohodRows.length > 0) {
+    if (keepsManual('dohod')) return manualKept;
+    const refined = refineForecasts(dohodRows, smartlabRows ?? [], now);
+    await writeFromPreferred(assetId, refined.dohod, 'dividend', 'dohod');
+    // smart-lab's rows here are forecasts only; writing them also removes its payments from the
+    // time it was the stock's source, before dohod.ru listed it.
+    await writePaymentHistory(assetId, refined.smartlab, 'dividend', 'smartlab');
+    return { rows: [...refined.dohod, ...refined.smartlab], divInfo: null, outcome: 'loaded' };
   }
 
-  const dropped = !covered && (await isDohodIndexLoaded());
-  const divInfo = await writeFromMoex(ra, 'dividend', 'dohod', dropped);
-  return { dohodRows: null, divInfo, outcome: moexOutcome(divInfo, dropped) };
+  // dohod.ru gave nothing. Listed with an empty file, or not listed while its index loaded, means
+  // it has nothing for the security; otherwise it is merely unreachable and its stored rows stay.
+  const dohodDropped = dohodRows != null || (!dohodListed && (await isDohodIndexLoaded()));
+  if (hasStored('dohod') && !dohodDropped) return { rows: null, divInfo: null, outcome: 'unreachable' };
+
+  const smartlabMain = smartlabRows ? smartlabAsMain(smartlabRows, now) : [];
+  if (smartlabMain.length > 0) {
+    if (keepsManual('smartlab')) return manualKept;
+    await deleteStoredPayments(assetId, 'dividend', 'moex');
+    await deleteStoredPayments(assetId, 'dividend', 'dohod');
+    await writePaymentHistory(assetId, smartlabMain, 'dividend', 'smartlab');
+    return { rows: smartlabMain, divInfo: null, outcome: 'loaded' };
+  }
+
+  if (dohodRows) {
+    // Listed on dohod.ru with nothing, and smart-lab has nothing either.
+    await writeFromPreferred(assetId, [], 'dividend', 'dohod');
+    return { rows: [], divInfo: null, outcome: 'no-source' };
+  }
+
+  const smartlabDropped = smartlabRows != null || (!smartlabListed && (await isSmartlabIndexLoaded()));
+  const divInfo = await writeFromMoex(ra, 'dividend', [
+    { source: 'dohod', dropped: dohodDropped },
+    { source: 'smartlab', dropped: smartlabDropped },
+  ]);
+  return { rows: null, divInfo, outcome: moexOutcome(divInfo, dohodDropped && smartlabDropped) };
 }
 
 /** After the preferred source gave nothing: MOEX loaded something, or every source said no. */
@@ -503,14 +559,14 @@ async function syncFundDistributions(ra: ResolvedAsset): Promise<{
     return { fundRows, outcome: 'loaded' };
   }
   const dropped = !fundKey && (await isFundIndexLoaded());
-  const divInfo = await writeFromMoex(ra, 'distribution', 'parus', dropped);
+  const divInfo = await writeFromMoex(ra, 'distribution', [{ source: 'parus', dropped }]);
   // A listed fund whose file holds no payouts counts as "no source" too.
   return { fundRows, outcome: moexOutcome(divInfo, dropped || fundRows?.length === 0) };
 }
 
 async function writePaymentHistory(
   assetId: number,
-  rows: (DividendHistoryRow & { isForecast?: boolean })[],
+  rows: SyncedDividendRow[],
   type: PaymentHistory['type'],
   dataSource: DataSource = 'moex',
 ): Promise<void> {
@@ -529,14 +585,18 @@ async function writePaymentHistory(
     type,
     dataSource,
     ...(row.isForecast ? { isForecast: true } : {}),
+    ...(row.isForecast && row.recommended ? { recommended: true } : {}),
   })));
   const stored = groupByDate(existing);
 
   const toDelete: number[] = [];
   const toUpdate: { key: number; changes: Partial<PaymentHistory> }[] = [];
   const toAdd: Omit<PaymentHistory, 'id'>[] = [];
-  const same = (a: Pick<PaymentHistory, 'amount' | 'isForecast'>, b: Pick<PaymentHistory, 'amount' | 'isForecast'>) =>
-    a.amount === b.amount && (a.isForecast === true) === (b.isForecast === true);
+  type Comparable = Pick<PaymentHistory, 'amount' | 'isForecast' | 'recommended'>;
+  const same = (a: Comparable, b: Comparable) =>
+    a.amount === b.amount &&
+    (a.isForecast === true) === (b.isForecast === true) &&
+    (a.recommended === true) === (b.recommended === true);
 
   for (const [time, records] of stored) {
     const next = incoming.get(time) ?? [];
@@ -549,7 +609,7 @@ async function writePaymentHistory(
     });
     for (const record of leftover) {
       const n = next.shift();
-      if (n) toUpdate.push({ key: record.id!, changes: { amount: n.amount, isForecast: n.isForecast } });
+      if (n) toUpdate.push({ key: record.id!, changes: { amount: n.amount, isForecast: n.isForecast, recommended: n.recommended } });
       else toDelete.push(record.id!);
     }
     toAdd.push(...next);
@@ -614,7 +674,7 @@ export async function syncAssetPayments(
 
     const { outcome } = ra.asset.type === 'Фонды'
       ? await syncFundDistributions(ra)
-      : await syncStockDividends(ra);
+      : await syncStockDividends(ra, { keepManual: !options?.replaceManual });
     if (options?.replaceManual && outcome === 'loaded') await deleteManualPayments(ra.asset.id!);
 
     const activeDates = await storedPaymentDates(ra.asset.id!);

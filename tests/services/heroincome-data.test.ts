@@ -6,6 +6,9 @@ vi.stubGlobal('fetch', mockFetch);
 import {
   fetchDohodDividends,
   isDohodAvailable,
+  fetchSmartlabDividends,
+  isSmartlabAvailable,
+  isSmartlabIndexLoaded,
   resetDohodCache,
   findFundKey,
   fetchFundDistributions,
@@ -106,6 +109,48 @@ describe('heroincome-data', () => {
     it('normalizes ticker to uppercase', async () => {
       mockFetchResponses({ 'stocks/dohod/index.json': MOCK_INDEX });
       expect(await isDohodAvailable('lkoh')).toBe(true);
+    });
+  });
+
+  describe('smart-lab', () => {
+    const SL_INDEX = { updatedAt: '2026-11-12T08:15:59Z', tickersCount: 2, tickers: ['LPSB', 'PHOR'] };
+    const SL_PHOR = {
+      ticker: 'PHOR',
+      page: 'https://smart-lab.ru/q/PHOR/dividend/',
+      scrapedAt: '2026-11-12T08:15:59Z',
+      payments: [
+        { recordDate: '2026-12-13', lastBuyDate: '2026-12-10', period: '2026 н/расп', amount: 309, currency: 'RUB', status: 'recommended' },
+        { recordDate: '2025-07-05', lastBuyDate: '2025-07-03', period: '1кв 2025', amount: 201, currency: 'RUB', status: 'canceled' },
+        { recordDate: '2024-07-11', lastBuyDate: '2024-07-10', period: '4кв 2023', amount: 294, currency: 'RUB', status: 'paid' },
+        { recordDate: '2024-07-11', lastBuyDate: '2024-07-10', period: '1кв 2024', amount: 15, currency: 'RUB', status: 'paid' },
+        { recordDate: '2019-07-01', lastBuyDate: null, period: null, amount: 1.5, currency: 'USD', status: 'paid' },
+        { recordDate: '2018-07-01', lastBuyDate: null, period: null, amount: null, currency: null, status: 'paid', listedAs: 'PHOS' },
+      ],
+    };
+
+    it('reads rows with their status; two dividends of one date stay two; only rubles', async () => {
+      mockFetchResponses({ 'stocks/smartlab/index.json': SL_INDEX, 'stocks/smartlab/PHOR.json': SL_PHOR });
+      expect(await fetchSmartlabDividends('phor')).toEqual([
+        { date: new Date('2026-12-13'), amount: 309, status: 'recommended' },
+        { date: new Date('2025-07-05'), amount: 201, status: 'canceled' },
+        { date: new Date('2024-07-11'), amount: 294, status: 'paid' },
+        { date: new Date('2024-07-11'), amount: 15, status: 'paid' },
+      ]);
+    });
+
+    it('null for a ticker smart-lab does not list, without fetching its file', async () => {
+      mockFetchResponses({ 'stocks/smartlab/index.json': SL_INDEX });
+      expect(await isSmartlabAvailable('SBER')).toBe(false);
+      expect(await fetchSmartlabDividends('SBER')).toBeNull();
+      expect(mockFetch.mock.calls.some((c: unknown[]) => (c[0] as string).includes('smartlab/SBER.json'))).toBe(false);
+    });
+
+    it('tells an unreachable index from a ticker that is not listed', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 500 });
+      expect(await isSmartlabIndexLoaded()).toBe(false);
+      resetDohodCache();
+      mockFetchResponses({ 'stocks/smartlab/index.json': SL_INDEX });
+      expect(await isSmartlabIndexLoaded()).toBe(true);
     });
   });
 

@@ -177,6 +177,7 @@ function parsePayment(value: unknown, index: number): PaymentHistory {
     type: parseString(row.type, `paymentHistory[${index}].type`) as PaymentHistory['type'],
     dataSource: parseString(row.dataSource, `paymentHistory[${index}].dataSource`) as PaymentHistory['dataSource'],
     isForecast: row.isForecast === true ? true : undefined,
+    recommended: row.isForecast === true && row.recommended === true ? true : undefined,
   };
 }
 

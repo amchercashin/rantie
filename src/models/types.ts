@@ -84,6 +84,8 @@ export interface PortfolioStats {
    * Null when no asset in view has a value.
    */
   yieldPercent: number | null;
+  /** Some income in view is taxed (a rate > 0 applies): the UI says "после НДФЛ", otherwise "до НДФЛ". */
+  taxed: boolean;
 }
 
 export interface CategoryStats extends PortfolioStats {

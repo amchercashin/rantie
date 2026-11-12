@@ -20,6 +20,29 @@ describe('backup v3', () => {
     expect(data.exchangeRates).toHaveLength(1);
   });
 
+  it('keeps the NDFL rate of an account through export and import', async () => {
+    const now = new Date();
+    await db.accounts.add({ name: 'ИИС', ndflRate: 0, createdAt: now, updatedAt: now });
+    await db.accounts.add({ name: 'Брокер', createdAt: now, updatedAt: now });
+    const json = await exportAllData();
+    await db.delete();
+    await db.open();
+    await importAllData(json);
+    const accounts = await db.accounts.toArray();
+    expect(accounts.find((a) => a.name === 'ИИС')?.ndflRate).toBe(0);
+    expect(accounts.find((a) => a.name === 'Брокер')).not.toHaveProperty('ndflRate');
+  });
+
+  it('drops an NDFL rate outside 0–100% instead of failing the restore', async () => {
+    const now = new Date().toISOString();
+    await importAllData(JSON.stringify({
+      version: 3,
+      accounts: [{ id: 1, name: 'Сбер', ndflRate: 140, createdAt: now, updatedAt: now }],
+      assets: [], holdings: [], paymentHistory: [], importRecords: [], settings: [],
+    }));
+    expect((await db.accounts.toArray())[0]).not.toHaveProperty('ndflRate');
+  });
+
   it('imports v3 format with accounts and holdings', async () => {
     const now = new Date().toISOString();
     const json = JSON.stringify({

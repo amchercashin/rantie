@@ -17,7 +17,6 @@ import { SyncGlyph } from '@/components/ds/sync-glyph';
 import { MissingRateNotice } from '@/components/shared/missing-rate-notice';
 import { useAsset, updateAsset } from '@/hooks/use-assets';
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
-import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { usePaymentHistory } from '@/hooks/use-payment-history';
 import { useHoldingsByAsset } from '@/hooks/use-holdings';
 import { useAccounts } from '@/hooks/use-accounts';
@@ -39,7 +38,6 @@ export function AssetDetailPage() {
   const history = usePaymentHistory(assetId);
   const holdings = useHoldingsByAsset(assetId);
   const accounts = useAccounts();
-  const ndflRates = useNdflRates();
   const [editIncome, setEditIncome] = useState(false);
   const [editFrequency, setEditFrequency] = useState(false);
 
@@ -103,7 +101,7 @@ export function AssetDetailPage() {
         : `Сумма ${calculated.usedPayments.length} ${calculated.usedPayments.length === 1 ? 'выплаты' : 'выплат'} за 12 месяцев`;
   // "на 1 бумагу" for securities, "на 1 шт" for several units, nothing for a single object.
   const perUnitLabel = exchange ? 'на 1 бумагу' : totalQuantity === 1 ? '' : 'на 1 шт';
-  const taxed = (ndflRates.get(asset.type) ?? 0) > 0;
+  const taxed = stats?.taxed ?? false;
   // Without a rate the ruble figures are unknown — show dashes, not a misleading 0 ₽.
   const rateMissing = stats?.rateMissing ?? false;
   // Without a price the value is unknown too, and so are the yield and the share; the income is not.

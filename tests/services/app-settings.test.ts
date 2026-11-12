@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { db } from '@/db/database';
-import { updateAppSetting, getNdflRates, updateNdflRate, DEFAULT_NDFL_RATE } from '@/services/app-settings';
+import {
+  updateAppSetting, getNdflRates, updateNdflRate, DEFAULT_NDFL_RATE, migrateNdflToAccounts,
+} from '@/services/app-settings';
+import { deleteAccount } from '@/hooks/use-accounts';
 import { createAssetDraft } from '@/services/asset-factory';
 
 describe('app-settings', () => {
@@ -15,76 +18,113 @@ describe('app-settings', () => {
     expect(rows).toContainEqual({ key: 'someKey', value: 'someValue' });
   });
 
-  describe('ndfl rates', () => {
+  async function addAccount(name: string): Promise<number> {
+    const now = new Date();
+    return (await db.accounts.add({ name, createdAt: now, updatedAt: now })) as number;
+  }
+
+  async function hold(accountId: number, type: string): Promise<void> {
+    const now = new Date();
+    const assetId = (await db.assets.add(createAssetDraft({ type, name: `${type} ${accountId}`, dataSource: 'manual' }))) as number;
+    await db.holdings.add({ accountId, assetId, quantity: 1, quantitySource: 'manual', createdAt: now, updatedAt: now });
+  }
+
+  describe('ndfl rates per account', () => {
     it('reads rates without index cursors, which Safari can fail after the demo is removed', async () => {
-      await db.assets.add(createAssetDraft({ type: "Облигации", name: "ОФЗ", dataSource: "manual" }));
-      const broken = vi.spyOn(db.assets, 'orderBy').mockImplementation(() => {
+      const id = await addAccount('Брокер');
+      const broken = vi.spyOn(db.accounts, 'orderBy').mockImplementation(() => {
         throw new DOMException('Unable to open cursor', 'UnknownError');
       });
-      const rates = await getNdflRates();
-      expect(rates.get('Облигации')).toBe(DEFAULT_NDFL_RATE);
+      expect((await getNdflRates()).get(id)).toBe(DEFAULT_NDFL_RATE);
       broken.mockRestore();
     });
 
-    it('returns empty map when no rates are set', async () => {
-      const rates = await getNdflRates();
-      expect(rates.size).toBe(0);
+    it('is empty without accounts', async () => {
+      expect((await getNdflRates()).size).toBe(0);
     });
 
-    it('stores and retrieves a rate for a category', async () => {
-      await updateNdflRate('Акции', 13);
-      const rates = await getNdflRates();
-      expect(rates.get('Акции')).toBe(13);
-    });
-
-    it('handles multiple categories independently', async () => {
-      await updateNdflRate('Акции', 13);
-      await updateNdflRate('Облигации', 15);
-      await updateNdflRate('Вклады', 0);
-      const rates = await getNdflRates();
-      expect(rates.get('Акции')).toBe(13);
-      expect(rates.get('Облигации')).toBe(15);
-      expect(rates.get('Вклады')).toBe(0);
-    });
-
-    it('overwrites previous rate for same category', async () => {
-      await updateNdflRate('Акции', 13);
-      await updateNdflRate('Акции', 15);
-      const rates = await getNdflRates();
-      expect(rates.get('Акции')).toBe(15);
-    });
-
-    it('ignores non-ndfl settings keys', async () => {
-      await updateAppSetting('defaultPeriod', 'year');
-      await updateNdflRate('Акции', 13);
-      const rates = await getNdflRates();
-      expect(rates.size).toBe(1);
-      expect(rates.has('Акции')).toBe(true);
-    });
-
-    it('gives every held category 13% until the user picks a rate', async () => {
-      await db.assets.add(createAssetDraft({ type: 'Акции', name: 'Сбер', dataSource: 'manual' }));
-      await db.assets.add(createAssetDraft({ type: 'Вклады', name: 'Вклад', dataSource: 'manual' }));
+    it('gives every account 13% until the user picks a rate', async () => {
+      const broker = await addAccount('Брокер');
+      const iis = await addAccount('ИИС');
       const rates = await getNdflRates();
       expect(DEFAULT_NDFL_RATE).toBe(13);
-      expect(rates.get('Акции')).toBe(13);
-      expect(rates.get('Вклады')).toBe(13);
+      expect(rates.get(broker)).toBe(13);
+      expect(rates.get(iis)).toBe(13);
     });
 
-    it('keeps a rate the user chose, including 0%', async () => {
-      await db.assets.add(createAssetDraft({ type: 'Акции', name: 'Сбер', dataSource: 'manual' }));
-      await db.assets.add(createAssetDraft({ type: 'Недвижимость', name: 'Студия', dataSource: 'manual' }));
-      await updateNdflRate('Акции', 0);
-      await updateNdflRate('Недвижимость', 4);
+    it('keeps a rate the user chose, including 0% and fractions', async () => {
+      const iis = await addAccount('ИИС');
+      const flat = await addAccount('Квартира');
+      await updateNdflRate(iis, 0);
+      await updateNdflRate(flat, 6.5);
       const rates = await getNdflRates();
-      expect(rates.get('Акции')).toBe(0);
-      expect(rates.get('Недвижимость')).toBe(4);
+      expect(rates.get(iis)).toBe(0);
+      expect(rates.get(flat)).toBe(6.5);
     });
 
-    it('handles custom fractional rates', async () => {
-      await updateNdflRate('Недвижимость', 6.5);
+    it('ignores other settings and accounts that no longer exist', async () => {
+      const id = await addAccount('Брокер');
+      await updateAppSetting('defaultPeriod', 'year');
+      await updateNdflRate(999, 0);
       const rates = await getNdflRates();
-      expect(rates.get('Недвижимость')).toBe(6.5);
+      expect([...rates.keys()]).toEqual([id]);
+    });
+
+    it('goes away with the account', async () => {
+      const iis = await addAccount('ИИС');
+      const broker = await addAccount('Брокер');
+      await updateNdflRate(iis, 0);
+      await updateNdflRate(broker, 15);
+      await deleteAccount(iis);
+      const keys = (await db.settings.toArray()).map((r) => r.key);
+      expect(keys).not.toContain(`ndfl@${iis}`);
+      expect(keys).toContain(`ndfl@${broker}`);
+    });
+  });
+
+  describe('carrying old per-category rates over to accounts', () => {
+    it('gives an account the rate all its categories had, once', async () => {
+      const iis = await addAccount('ИИС');
+      const broker = await addAccount('Брокер');
+      await hold(iis, 'Облигации');
+      await hold(broker, 'Акции');
+      await hold(broker, 'Облигации');
+      await db.settings.bulkPut([
+        { key: 'ndfl-Облигации', value: '0' },
+        { key: 'ndfl-Акции', value: '13' },
+      ]);
+
+      await migrateNdflToAccounts();
+
+      const rates = await getNdflRates();
+      expect(rates.get(iis)).toBe(0); // its only category was at 0%
+      expect(rates.get(broker)).toBe(13); // mixed 13% and 0%: the default
+      const keys = (await db.settings.toArray()).map((r) => r.key);
+      expect(keys.some((k) => k.startsWith('ndfl-'))).toBe(false);
+
+      // A second start changes nothing.
+      await updateNdflRate(iis, 15);
+      await migrateNdflToAccounts();
+      expect((await getNdflRates()).get(iis)).toBe(15);
+    });
+
+    it('takes a rate set for an account inside a category, and keeps an account rate already set', async () => {
+      const iis = await addAccount('ИИС');
+      const flat = await addAccount('Квартира');
+      await hold(iis, 'Акции');
+      await hold(flat, 'Недвижимость');
+      await db.settings.bulkPut([
+        { key: `ndfl@${iis}:Акции`, value: '0' },
+        { key: 'ndfl-Недвижимость', value: '4' },
+        { key: `ndfl@${flat}`, value: '6' },
+      ]);
+
+      await migrateNdflToAccounts();
+
+      const rates = await getNdflRates();
+      expect(rates.get(iis)).toBe(0);
+      expect(rates.get(flat)).toBe(6);
+      expect((await db.settings.toArray()).map((r) => r.key)).not.toContain(`ndfl@${iis}:Акции`);
     });
   });
 });

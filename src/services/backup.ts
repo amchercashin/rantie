@@ -3,6 +3,7 @@ import type { Account, Holding } from '@/models/account';
 import type { Asset, ExchangeRate, ImportRecord, PaymentHistory } from '@/models/types';
 import { normalizeAssetDefaults } from './asset-factory';
 import { normalizeCurrency } from './exchange-rates';
+import { legacyNdflToAccounts } from './ndfl-rates';
 
 interface BackupPayload {
   version: number;
@@ -48,7 +49,10 @@ export async function importAllData(json: string): Promise<void> {
     if (data.paymentHistory.length) await db.paymentHistory.bulkAdd(data.paymentHistory);
     if (data.importRecords.length) await db.importRecords.bulkAdd(data.importRecords);
     if (data.exchangeRates.length) await db.exchangeRates.bulkPut(data.exchangeRates);
-    if (data.settings.length) await db.settings.bulkPut(data.settings);
+    // A backup from before rates moved to accounts: turn its category rates into account rates.
+    const { put, remove } = legacyNdflToAccounts(data.settings, data.assets, data.holdings);
+    const settings = [...data.settings.filter((row) => !remove.includes(row.key)), ...put];
+    if (settings.length) await db.settings.bulkPut(settings);
   });
 }
 

@@ -36,11 +36,11 @@ function payment(assetId: number, date: string, amount: number, extra: Partial<P
   return { assetId, date: new Date(`${date}T12:00:00`), amount, type: 'dividend', dataSource: 'moex', ...extra };
 }
 
-function run(assets: Asset[], holdings: Holding[], history: PaymentHistory[], ndfl = new Map<string, number>()) {
+function run(assets: Asset[], holdings: Holding[], history: PaymentHistory[], ndfl = new Map<number, number>()) {
   const snapshot = calculatePortfolioSnapshot({
     assets, holdings, paymentHistory: history, ndflRates: ndfl, exchangeRates: new Map([['USD', 90]]), now: NOW,
   });
-  const input = { assets, paymentHistory: history, assetsById: snapshot.assetsById, ndflRates: ndfl, now: NOW };
+  const input = { assets, paymentHistory: history, assetsById: snapshot.assetsById, now: NOW };
   return { snapshot, projection: projectIncome(input), timeline: incomeTimeline(input) };
 }
 
@@ -50,7 +50,7 @@ describe('projectIncome', () => {
       [stock({ id: 1 })],
       [holding(1, 10)],
       [payment(1, '2025-07-18', 30), payment(1, '2026-07-18', 36)],
-      new Map([['Акции', 13]]),
+      new Map([[1, 13]]),
     );
 
     expect(projection).toHaveLength(1);
@@ -58,6 +58,21 @@ describe('projectIncome', () => {
     expect(projection[0].amount).toBeCloseTo(36 * 10 * 0.87);
     expect(projection[0].perUnit).toBe(36);
     expect(projection[0]).toMatchObject({ estimated: false, basis: 'last-year' });
+  });
+
+  it('taxes each account at its own rate', () => {
+    const assets = [stock({ id: 1 })];
+    const holdings: Holding[] = [
+      { ...holding(1, 30), id: 1, accountId: 1 },
+      { ...holding(1, 10), id: 2, accountId: 2 },
+    ];
+    const history = [payment(1, '2026-07-18', 36)];
+    const snapshot = calculatePortfolioSnapshot({
+      assets, holdings, paymentHistory: history, ndflRates: new Map([[1, 13], [2, 0]]), exchangeRates: new Map(), now: NOW,
+    });
+    const projection = projectIncome({ assets, paymentHistory: history, assetsById: snapshot.assetsById, now: NOW });
+
+    expect(projection[0].amount).toBeCloseTo(36 * 30 * 0.87 + 36 * 10);
   });
 
   it('prefers a forecast over the repeated payment', () => {
@@ -124,7 +139,7 @@ describe('projectIncome', () => {
         payment(2, '2026-06-03', 35.4),
         payment(4, '2026-09-05', 50000, { dataSource: 'manual' }),
       ],
-      new Map([['Акции', 13], ['Облигации', 13]]),
+      new Map([[1, 13]]),
     );
 
     const total = projection.reduce((sum, p) => sum + p.amount, 0);
@@ -165,7 +180,7 @@ describe('projectIncome', () => {
     // Pays monthly since April 2026: five payouts by 25 Sep, so only five can be repeated a year later.
     const fund = stock({ id: 1, type: 'Фонды', ticker: undefined, isin: 'RU000A10BBS6', frequencyPerYear: 12 });
     const history = ['2026-04-30', '2026-05-29', '2026-06-30', '2026-07-31', '2026-08-31'].map((d) => payment(1, d, 9.38, { type: 'distribution' }));
-    const { projection, snapshot, timeline } = run([fund], [holding(1, 147)], history, new Map([['Фонды', 13]]));
+    const { projection, snapshot, timeline } = run([fund], [holding(1, 147)], history, new Map([[1, 13]]));
 
     expect(projection.map((p) => [day(p.date), p.basis])).toEqual([
       ['2026-09-30', 'average'],

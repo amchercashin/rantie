@@ -19,7 +19,6 @@ import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
 import { useInstallPrompt } from '@/hooks/use-install-prompt';
 import { useDemoAccountId } from '@/hooks/use-demo';
 import { useBackupReminder } from '@/hooks/use-backup-reminder';
-import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { useIncomeGoal } from '@/hooks/use-income-goal';
 import { InstallCard } from '@/components/install-card';
 import { upcomingPayments } from '@/services/income-projection';
@@ -44,13 +43,12 @@ export function MainPage() {
   const navigate = useNavigate();
   const { toast, confirm } = useFeedback();
   const backup = useBackupReminder();
-  const ndflRates = useNdflRates();
   const goal = useIncomeGoal();
   const upcomingRef = useRef<HTMLElement>(null);
   const structureRef = useRef<HTMLElement>(null);
   const stopScrollRef = useRef<(() => void) | null>(null);
-  // The hero promises "after tax" only when some rate is actually set for the categories held.
-  const taxed = categories.some((c) => (ndflRates.get(c.type) ?? 0) > 0);
+  // The hero promises "after tax" only when some rate (category or account) actually applies.
+  const taxed = portfolio.taxed;
 
   useEffect(() => { hasVisitedMainPage = true; }, []);
   useEffect(() => () => stopScrollRef.current?.(), []);

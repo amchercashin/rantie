@@ -63,11 +63,7 @@ describe('tax disclosure UI', () => {
   });
 
   it('explains in settings that payments are stored before tax and income is shown after tax', async () => {
-    await db.assets.add(createAssetDraft({
-      type: 'Акции',
-      name: 'Сбер',
-      dataSource: 'manual',
-    }));
+    await db.accounts.add({ name: 'Брокер', createdAt: new Date(), updatedAt: new Date() });
 
     render(<NdflSettings />);
 
@@ -103,6 +99,8 @@ describe('tax disclosure UI', () => {
             currency: 'RUB',
             rateToRub: 1,
             rateMissing: false,
+            taxMultiplier: 0.87,
+            taxed: true,
           }}
         />
       </MemoryRouter>,

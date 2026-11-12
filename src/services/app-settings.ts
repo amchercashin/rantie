@@ -1,6 +1,5 @@
 import { db } from '@/db/database';
-
-const NDFL_PREFIX = 'ndfl-';
+import { DEFAULT_NDFL_RATE, legacyNdflToAccounts, ndflKey, ndflKeyAccount } from './ndfl-rates';
 
 export async function updateAppSetting(key: string, value: string): Promise<void> {
   await db.settings.put({ key, value });
@@ -11,39 +10,48 @@ export async function clearAllData(): Promise<void> {
   await db.open();
 }
 
-/**
- * Rate a category gets until the user picks one. 13% is what most people pay on dividends,
- * coupons and deposit interest; an over-taxed estimate is safer than a gross one shown as net.
- */
-export const DEFAULT_NDFL_RATE = 13;
+export { DEFAULT_NDFL_RATE } from './ndfl-rates';
 
 /**
- * Rates for every category in the portfolio: the user's choice where saved,
- * DEFAULT_NDFL_RATE otherwise. Pure calculators treat a missing key as 0%, so the
- * default must be filled in here — this is the one place the app reads rates from.
+ * Rate of every account: the user's choice where saved, DEFAULT_NDFL_RATE otherwise. Pure
+ * calculators treat a missing account as 0%, so the default must be filled in here — this is
+ * the one place the app reads rates from.
  */
-export async function getNdflRates(): Promise<Map<string, number>> {
-  // Plain reads only: Safari can fail an index cursor (`orderBy('type').uniqueKeys()`) with
-  // "UnknownError: Unable to open cursor" after assets are deleted, and the app then never starts.
-  const [rows, assets] = await Promise.all([
-    db.settings.toArray(),
-    db.assets.toArray(),
-  ]);
-  const types = new Set(assets.map((a) => a.type));
-  const map = new Map<string, number>();
+export async function getNdflRates(): Promise<Map<number, number>> {
+  // Plain reads only: Safari can fail an index cursor with "UnknownError: Unable to open cursor"
+  // after records are deleted, and the app then never starts.
+  const [rows, accounts] = await Promise.all([db.settings.toArray(), db.accounts.toArray()]);
+  const saved = new Map<number, number>();
   for (const row of rows) {
-    if (row.key.startsWith(NDFL_PREFIX)) {
-      const category = row.key.slice(NDFL_PREFIX.length);
-      const rate = Number(row.value);
-      if (isFinite(rate)) map.set(category, rate);
-    }
+    const accountId = ndflKeyAccount(row.key);
+    const rate = Number(row.value);
+    if (accountId != null && isFinite(rate)) saved.set(accountId, rate);
   }
-  for (const type of types) {
-    if (typeof type === 'string' && !map.has(type)) map.set(type, DEFAULT_NDFL_RATE);
+  const map = new Map<number, number>();
+  for (const account of accounts) {
+    if (account.id != null) map.set(account.id, saved.get(account.id) ?? DEFAULT_NDFL_RATE);
   }
   return map;
 }
 
-export async function updateNdflRate(category: string, rate: number): Promise<void> {
-  await db.settings.put({ key: `${NDFL_PREFIX}${category}`, value: String(rate) });
+export async function updateNdflRate(accountId: number, rate: number): Promise<void> {
+  await db.settings.put({ key: ndflKey(accountId), value: String(rate) });
+}
+
+/** The account is being deleted. Call inside a transaction that includes `settings`. */
+export async function deleteNdflRate(accountId: number): Promise<void> {
+  await db.settings.delete(ndflKey(accountId));
+}
+
+/**
+ * Once per database: rates set per category before they moved to accounts become account rates
+ * (see legacyNdflToAccounts). Runs at startup; a no-op when there's nothing old left.
+ */
+export async function migrateNdflToAccounts(): Promise<void> {
+  await db.transaction('rw', [db.settings, db.assets, db.holdings], async () => {
+    const [settings, assets, holdings] = await Promise.all([db.settings.toArray(), db.assets.toArray(), db.holdings.toArray()]);
+    const { put, remove } = legacyNdflToAccounts(settings, assets, holdings);
+    if (remove.length) await db.settings.bulkDelete(remove);
+    if (put.length) await db.settings.bulkPut(put);
+  });
 }

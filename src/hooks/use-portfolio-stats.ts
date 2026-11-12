@@ -38,7 +38,7 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
       assets: assets ?? [],
       holdings: holdings ?? [],
       paymentHistory: allHistory ?? [],
-      ndflRates: ndflRates ?? new Map<string, number>(),
+      ndflRates: ndflRates ?? new Map<number, number>(),
       exchangeRates: ratesArrayToMap(exchangeRates ?? []),
     };
     const { portfolio, categories, assetsById, missingRates } = calculatePortfolioSnapshot(input);
@@ -46,7 +46,6 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
       assets: input.assets,
       paymentHistory: input.paymentHistory,
       assetsById,
-      ndflRates: input.ndflRates,
     };
     const projection = projectIncome(projectionInput);
     const timeline = withTimeline && !isLoading ? incomeTimeline(projectionInput) : [];

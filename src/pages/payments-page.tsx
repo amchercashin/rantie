@@ -12,17 +12,15 @@ import { TransitionLink } from '@/components/ui/transition-link';
 import { guidePath } from '@/lib/guide';
 import { useAllPaymentHistory } from '@/hooks/use-payment-history';
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
-import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { bucketByMonth } from '@/services/income-projection';
 import type { Asset, PaymentHistory } from '@/models/types';
 
 type View = 'calendar' | 'history';
 
 export function PaymentsPage() {
-  const { assets, projection, isLoading } = usePortfolioStats();
+  const { portfolio, assets, projection, isLoading } = usePortfolioStats();
   const allPayments = useAllPaymentHistory();
-  const ndflRates = useNdflRates();
-  const taxed = assets.some((a) => (ndflRates.get(a.type) ?? 0) > 0);
+  const taxed = portfolio.taxed;
   const location = useLocation();
   const [highlightAssetId] = useState(() => (location.state as { highlightAssetId?: number } | null)?.highlightAssetId);
   const [view, setView] = useState<View>(highlightAssetId != null ? 'history' : 'calendar');
@@ -76,7 +74,7 @@ export function PaymentsPage() {
             <div key="calendar" className="animate-[hi-fade-slide-up_0.4s_var(--hi-ease-out)_both]">
               <CashFlowCalendar buckets={buckets} assetsById={assetsById} />
               <p className="mt-4 px-1 text-[length:var(--hi-text-micro)] leading-relaxed text-[var(--hi-text-3)]">
-                {taxed ? 'Суммы после НДФЛ' : 'Суммы до НДФЛ (ставка 0% в настройках)'} для текущего количества бумаг. Подпись у выплаты говорит, откуда сумма: рекомендовано советом директоров, прогноз, как год назад, средняя выплата, как последняя выплата или ваша сумма.{' '}
+                {taxed ? 'Суммы после НДФЛ' : 'Суммы до НДФЛ (ставка 0%)'} для текущего количества бумаг. Подпись у выплаты говорит, откуда сумма: рекомендовано советом директоров, прогноз, как год назад, средняя выплата, как последняя выплата или ваша сумма.{' '}
                 <TransitionLink to={guidePath('calendar')} className="font-semibold text-[var(--hi-gold)]">
                   Как читать календарь
                 </TransitionLink>

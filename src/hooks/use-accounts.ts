@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/database';
 import type { Account } from '@/models/account';
+import { deleteNdflRate } from '@/services/app-settings';
 
 export function useAccounts() {
   return useLiveQuery(() => db.accounts.toArray()) ?? [];
@@ -16,7 +17,7 @@ export async function updateAccount(id: number, changes: Partial<Account>): Prom
 }
 
 export async function deleteAccount(id: number): Promise<void> {
-  await db.transaction('rw', db.accounts, db.holdings, db.assets, db.paymentHistory, async () => {
+  await db.transaction('rw', [db.accounts, db.holdings, db.assets, db.paymentHistory, db.table('settings')], async () => {
     const holdings = await db.holdings.where('accountId').equals(id).toArray();
     const assetIds = holdings.map(h => h.assetId);
 
@@ -30,6 +31,7 @@ export async function deleteAccount(id: number): Promise<void> {
       }
     }
 
+    await deleteNdflRate(id);
     await db.accounts.delete(id);
   });
 }

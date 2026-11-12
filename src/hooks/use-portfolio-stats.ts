@@ -4,7 +4,7 @@ import { db } from '@/db/database';
 import type { Asset, PortfolioStats, CategoryStats } from '@/models/types';
 import { calculatePortfolioSnapshot, type CalculatedAssetStats } from '@/services/portfolio-calculator';
 import { projectIncome, incomeTimeline, type ProjectedPayment, type TimelinePoint } from '@/services/income-projection';
-import { getNdflRates } from '@/services/app-settings';
+import { getAccountNdflRates, getNdflRates } from '@/services/app-settings';
 import { ratesArrayToMap } from '@/services/exchange-rates';
 
 export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
@@ -25,12 +25,14 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
   const holdings = useLiveQuery(() => db.holdings.toArray(), []);
   const allHistory = useLiveQuery(() => db.paymentHistory.toArray(), []);
   const ndflRates = useLiveQuery(() => getNdflRates(), []);
+  const accountNdflRates = useLiveQuery(() => getAccountNdflRates(), []);
   const exchangeRates = useLiveQuery(() => db.exchangeRates.toArray(), []);
   const isLoading =
     assets === undefined ||
     holdings === undefined ||
     allHistory === undefined ||
     ndflRates === undefined ||
+    accountNdflRates === undefined ||
     exchangeRates === undefined;
 
   return useMemo(() => {
@@ -39,6 +41,7 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
       holdings: holdings ?? [],
       paymentHistory: allHistory ?? [],
       ndflRates: ndflRates ?? new Map<string, number>(),
+      accountNdflRates: accountNdflRates ?? new Map<number, Map<string, number>>(),
       exchangeRates: ratesArrayToMap(exchangeRates ?? []),
     };
     const { portfolio, categories, assetsById, missingRates } = calculatePortfolioSnapshot(input);
@@ -46,10 +49,9 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
       assets: input.assets,
       paymentHistory: input.paymentHistory,
       assetsById,
-      ndflRates: input.ndflRates,
     };
     const projection = projectIncome(projectionInput);
     const timeline = withTimeline && !isLoading ? incomeTimeline(projectionInput) : [];
     return { portfolio, categories, assetsById, missingRates, assets: input.assets, projection, timeline, isLoading };
-  }, [assets, holdings, allHistory, ndflRates, exchangeRates, isLoading, withTimeline]);
+  }, [assets, holdings, allHistory, ndflRates, accountNdflRates, exchangeRates, isLoading, withTimeline]);
 }

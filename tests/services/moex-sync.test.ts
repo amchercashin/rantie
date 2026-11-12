@@ -1387,6 +1387,45 @@ describe('smart-lab after dohod.ru', () => {
     expect(await rowsOf(assetId)).toEqual([{ date: '2026-06-01', amount: 0.03, src: 'smartlab' }]);
   });
 
+  it('a full sync does not put smart-lab payments next to the ones typed in by hand', async () => {
+    // Until smart-lab, a stock outside dohod.ru got its payments typed in; both together would count twice.
+    const assetId = (await db.assets.add(STOCK('LPSB'))) as number;
+    await db.holdings.add({ accountId: 1, assetId, quantity: 10, quantitySource: 'manual', createdAt: new Date(), updatedAt: new Date() });
+    await db.paymentHistory.add({ assetId, amount: 14, date: new Date('2026-06-15'), type: 'dividend', dataSource: 'manual' });
+    (isSmartlabAvailable as Mock).mockResolvedValue(true);
+    (fetchSmartlabDividends as Mock).mockResolvedValue([{ date: new Date('2026-06-15'), amount: 14, status: 'paid' }]);
+    (fetchBatchStockPrices as Mock).mockResolvedValue(new Map([['LPSB', { currentPrice: 300, prevPrice: 300 }]]));
+
+    const result = await syncAllAssets();
+
+    expect(await rowsOf(assetId)).toEqual([{ date: '2026-06-15', amount: 14, src: 'manual' }]);
+    expect(result.warnings.some((w) => w.startsWith('LPSB:') && w.includes('⟳'))).toBe(true);
+
+    // ⟳ on the security, with the user's consent, replaces them.
+    const reload = await syncAssetPayments(assetId, { replaceManual: true });
+    expect(reload.outcome).toBe('loaded');
+    expect(await rowsOf(assetId)).toEqual([{ date: '2026-06-15', amount: 14, src: 'smartlab' }]);
+  });
+
+  it('the mark goes when smart-lab no longer lists the recommendation', async () => {
+    const assetId = (await db.assets.add(STOCK('LKOH'))) as number;
+    (isDohodAvailable as Mock).mockResolvedValue(true);
+    (fetchDohodDividends as Mock).mockResolvedValue([{ date: new Date('2026-12-09'), amount: 535, isForecast: true }]);
+    (isSmartlabAvailable as Mock).mockResolvedValue(true);
+    (fetchSmartlabDividends as Mock).mockResolvedValue([{ date: new Date('2026-12-09'), amount: 535, status: 'recommended' }]);
+    await syncAssetPayments(assetId);
+    const [marked] = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+    expect(marked.recommended).toBe(true);
+
+    (fetchSmartlabDividends as Mock).mockResolvedValue([]);
+    await syncAssetPayments(assetId);
+
+    const [after] = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+    expect(after.id).toBe(marked.id);
+    expect(after.recommended).toBeUndefined();
+    expect('recommended' in after).toBe(false);
+  });
+
   it('in neither dohod.ru nor smart-lab: no source, manual payments stay', async () => {
     const assetId = (await db.assets.add(STOCK('ABCD'))) as number;
     await db.paymentHistory.add({ assetId, amount: 5, date: new Date('2026-06-01'), type: 'dividend', dataSource: 'manual' });

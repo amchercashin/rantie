@@ -23,7 +23,8 @@ const daysApart = (a: Date, b: Date) => Math.abs(a.getTime() - b.getTime()) / DA
  * - Recommended by the board of directors: the forecast of the same dividend (closest record
  *   date within 45 days) is marked `recommended` when date and amount agree — usually so, dohod.ru
  *   picks up recommendations into its forecasts — and is replaced by smart-lab's row otherwise.
- *   A recommendation with no forecast is added, unless dohod.ru already has that payment dated ahead.
+ *   A recommendation with no forecast is added, unless dohod.ru already has that payment (a fact
+ *   within 45 days, ahead or just past).
  * - Canceled: the forecast of that dividend goes, and a zero forecast says «no payment expected»
  *   (it keeps the calendar from repeating last year's payment there).
  * The past, smart-lab's own forecasts and its paid rows do not matter here: dohod.ru has them.
@@ -59,7 +60,9 @@ export function refineForecasts(
         continue;
       }
       removed.add(i);
-    } else if (rows.some((r) => !r.isForecast && r.date > now && daysApart(r.date, rec.date) <= SAME_DIVIDEND_DAYS)) {
+    } else if (rows.some((r) => !r.isForecast && daysApart(r.date, rec.date) <= SAME_DIVIDEND_DAYS)) {
+      // dohod.ru already has the payment, dated ahead or with a shifted date already past
+      // (Мосбиржа 2023: 13.05.2024 there, 14.06.2024 on smart-lab): adding it would count it twice.
       continue;
     }
     added.push({ date: rec.date, amount: rec.amount, isForecast: true, recommended: true });

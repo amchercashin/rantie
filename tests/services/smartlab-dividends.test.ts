@@ -68,6 +68,17 @@ describe('refineForecasts — dohod.ru stays the source, smart-lab refines what 
     expect(res).toEqual({ dohod: rows, smartlab: [] });
   });
 
+  it('does not add a recommendation dohod.ru already has as a payment with a shifted date', () => {
+    // Мосбиржа: dohod.ru has the 2023 dividend on 13.05.2024, smart-lab on 14.06.2024. Between the two
+    // dates the recommendation would be added next to the repeated payment: the calendar counts it twice.
+    const res = refineForecasts(
+      [dohod('2026-10-30', 20, false)],
+      [sl('2026-12-01', 20, 'recommended')],
+      NOW,
+    );
+    expect(res).toEqual({ dohod: [{ date: d('2026-10-30'), amount: 20, isForecast: false }], smartlab: [] });
+  });
+
   it('does not add a recommendation when dohod.ru already has that payment dated ahead', () => {
     const res = refineForecasts([dohod('2026-12-09', 535, false)], [sl('2026-12-09', 535, 'recommended')], NOW);
     expect(res).toEqual({ dohod: [{ date: d('2026-12-09'), amount: 535, isForecast: false }], smartlab: [] });

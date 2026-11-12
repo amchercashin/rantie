@@ -362,7 +362,10 @@ async function syncPayments(
     return warnings;
   }
 
-  const { rows, divInfo } = await syncStockDividends(ra);
+  const { rows, divInfo, manualKept } = await syncStockDividends(ra, { keepManual: true });
+  if (manualKept) {
+    warnings.push(`${ticker}: выплаты нашлись в открытых источниках — ваши оставлены, ⟳ у бумаги на вкладке «Выплаты» заменит их`);
+  }
   const activeDates = await storedPaymentDates(ra.asset.id!);
 
   const frequencyPerYear = activeDates.length >= 2
@@ -475,11 +478,16 @@ async function writeFromMoex(
  * Under dohod.ru smart-lab only refines the upcoming dividends (`refineForecasts`): a board
  * recommendation marks or replaces the forecast, a cancellation removes it.
  * `rows` — what was written (null when no preferred source gave rows).
+ *
+ * `keepManual` (a full sync): a stock whose payments the user typed in — the advice for a stock
+ * with no source, until smart-lab covered many of them — keeps them, and the source is not written
+ * next to them: both would count. `manualKept` says so; ⟳ on the security replaces them with consent.
  */
-async function syncStockDividends(ra: ResolvedAsset): Promise<{
+async function syncStockDividends(ra: ResolvedAsset, { keepManual }: { keepManual: boolean }): Promise<{
   rows: SyncedDividendRow[] | null;
   divInfo: DividendResult | null;
   outcome: PaymentsOutcome;
+  manualKept?: boolean;
 }> {
   const assetId = ra.asset.id!;
   const ticker = ra.asset.ticker ?? ra.secid;
@@ -488,8 +496,14 @@ async function syncStockDividends(ra: ResolvedAsset): Promise<{
   const dohodRows = dohodListed ? await fetchDohodDividends(ticker) : null;
   const smartlabListed = await isSmartlabAvailable(ticker);
   const smartlabRows = smartlabListed ? await fetchSmartlabDividends(ticker) : null;
+  const stored = await storedPayments(assetId);
+  const hasStored = (source: DataSource) => stored.some((r) => r.type === 'dividend' && r.dataSource === source);
+  // The source would be written for the first time next to the user's own payments.
+  const keepsManual = (source: PreferredSource) => keepManual && hasStored('manual') && !hasStored(source);
+  const manualKept = { rows: null, divInfo: null, outcome: 'no-source' as const, manualKept: true };
 
   if (dohodRows && dohodRows.length > 0) {
+    if (keepsManual('dohod')) return manualKept;
     const refined = refineForecasts(dohodRows, smartlabRows ?? [], now);
     await writeFromPreferred(assetId, refined.dohod, 'dividend', 'dohod');
     // smart-lab's rows here are forecasts only; writing them also removes its payments from the
@@ -501,11 +515,11 @@ async function syncStockDividends(ra: ResolvedAsset): Promise<{
   // dohod.ru gave nothing. Listed with an empty file, or not listed while its index loaded, means
   // it has nothing for the security; otherwise it is merely unreachable and its stored rows stay.
   const dohodDropped = dohodRows != null || (!dohodListed && (await isDohodIndexLoaded()));
-  const hasDohodRows = (await storedPayments(assetId)).some((r) => r.type === 'dividend' && r.dataSource === 'dohod');
-  if (hasDohodRows && !dohodDropped) return { rows: null, divInfo: null, outcome: 'unreachable' };
+  if (hasStored('dohod') && !dohodDropped) return { rows: null, divInfo: null, outcome: 'unreachable' };
 
   const smartlabMain = smartlabRows ? smartlabAsMain(smartlabRows, now) : [];
   if (smartlabMain.length > 0) {
+    if (keepsManual('smartlab')) return manualKept;
     await deleteStoredPayments(assetId, 'dividend', 'moex');
     await deleteStoredPayments(assetId, 'dividend', 'dohod');
     await writePaymentHistory(assetId, smartlabMain, 'dividend', 'smartlab');
@@ -660,7 +674,7 @@ export async function syncAssetPayments(
 
     const { outcome } = ra.asset.type === 'Фонды'
       ? await syncFundDistributions(ra)
-      : await syncStockDividends(ra);
+      : await syncStockDividends(ra, { keepManual: !options?.replaceManual });
     if (options?.replaceManual && outcome === 'loaded') await deleteManualPayments(ra.asset.id!);
 
     const activeDates = await storedPaymentDates(ra.asset.id!);

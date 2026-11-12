@@ -1138,3 +1138,93 @@ describe('syncAllAssets', () => {
     expect(fetchBatchBondData).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('payments on one record date', () => {
+  // dohod.ru lists two dividends with one record date for some securities, e.g. ФосАгро
+  // 11.07.2024: 294 ₽ (2023) and 15 ₽ (Q1 2024). Both are paid, so both count.
+  const PHOR = {
+    type: 'Акции', name: 'PHOR', ticker: 'PHOR', moexSecid: 'PHOR',
+    moexBoardId: 'TQBR', moexMarket: 'shares' as const,
+    dataSource: 'moex' as const, createdAt: new Date(), updatedAt: new Date(),
+    ...ASSET_DEFAULTS, frequencySource: 'moex' as const,
+  };
+  const twoOnOneDate = [
+    { date: new Date('2024-07-11'), amount: 294, isForecast: false },
+    { date: new Date('2024-07-11'), amount: 15, isForecast: false },
+    { date: new Date('2024-12-22'), amount: 126, isForecast: false },
+  ];
+  const amounts = async (assetId: number) =>
+    (await db.paymentHistory.where('assetId').equals(assetId).toArray()).map((r) => r.amount).sort((a, b) => a - b);
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await db.delete();
+    await db.open();
+    (isDohodAvailable as Mock).mockResolvedValue(true);
+    (fetchBatchStockPrices as Mock).mockResolvedValue(new Map([['PHOR', { currentPrice: 6000, prevPrice: 6000 }]]));
+  });
+
+  it('stores every payment of a date, not the last one', async () => {
+    const assetId = (await db.assets.add(PHOR)) as number;
+    (fetchDohodDividends as Mock).mockResolvedValue(twoOnOneDate);
+
+    await syncAllAssets();
+
+    expect(await amounts(assetId)).toEqual([15, 126, 294]);
+  });
+
+  it('a repeated sync neither duplicates nor drops them', async () => {
+    const assetId = (await db.assets.add(PHOR)) as number;
+    (fetchDohodDividends as Mock).mockResolvedValue(twoOnOneDate);
+
+    await syncAllAssets();
+    const before = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+    await syncAllAssets();
+    const after = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+
+    expect(after.map((r) => r.id).sort()).toEqual(before.map((r) => r.id).sort());
+    expect(await amounts(assetId)).toEqual([15, 126, 294]);
+  });
+
+  it('keeps the stored row and adds the one an earlier sync lost', async () => {
+    const assetId = (await db.assets.add(PHOR)) as number;
+    // What the old code left behind: only the last row of the date.
+    const keptId = (await db.paymentHistory.add({
+      assetId, amount: 15, date: new Date('2024-07-11'), type: 'dividend', dataSource: 'dohod',
+    })) as number;
+    (fetchDohodDividends as Mock).mockResolvedValue(twoOnOneDate);
+
+    await syncAllAssets();
+
+    expect(await amounts(assetId)).toEqual([15, 126, 294]);
+    expect((await db.paymentHistory.get(keptId))?.amount).toBe(15);
+  });
+
+  it('removes a payment of the date the source no longer lists', async () => {
+    const assetId = (await db.assets.add(PHOR)) as number;
+    (fetchDohodDividends as Mock).mockResolvedValue(twoOnOneDate);
+    await syncAllAssets();
+
+    (fetchDohodDividends as Mock).mockResolvedValue([
+      { date: new Date('2024-07-11'), amount: 294, isForecast: false },
+      { date: new Date('2024-12-22'), amount: 126, isForecast: false },
+    ]);
+    await syncAllAssets();
+
+    expect(await amounts(assetId)).toEqual([126, 294]);
+  });
+
+  it('counts two payments of one date as one payout when inferring frequency', async () => {
+    const assetId = (await db.assets.add(PHOR)) as number;
+    (fetchDohodDividends as Mock).mockResolvedValue([
+      { date: new Date('2024-01-10'), amount: 10, isForecast: false },
+      { date: new Date('2024-07-11'), amount: 294, isForecast: false },
+      { date: new Date('2024-07-11'), amount: 15, isForecast: false },
+      { date: new Date('2025-01-10'), amount: 12, isForecast: false },
+    ]);
+
+    await syncAllAssets();
+
+    expect((await db.assets.get(assetId))?.frequencyPerYear).toBe(2);
+  });
+});

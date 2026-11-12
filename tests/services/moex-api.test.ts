@@ -69,6 +69,23 @@ describe('calcDividendFrequency', () => {
   it('returns 1 for single payment date', () => {
     expect(calcDividendFrequency([new Date('2024-07-01')])).toBe(1);
   });
+
+  it('takes payments within a few days of each other for one payout', () => {
+    // Two dividends with one record date (ФосАгро 11.07.2024) are not a 0-day interval.
+    const dates = [
+      new Date('2024-01-10'),
+      new Date('2024-07-11'),
+      new Date('2024-07-11'),
+      new Date('2025-01-10'),
+      new Date('2025-07-10'),
+      new Date('2025-07-12'),
+    ];
+    expect(calcDividendFrequency(dates)).toBe(2);
+  });
+
+  it('returns 1 when all payments fall on one date', () => {
+    expect(calcDividendFrequency([new Date('2024-07-11'), new Date('2024-07-11')])).toBe(1);
+  });
 });
 
 describe('parseDividendHistory', () => {

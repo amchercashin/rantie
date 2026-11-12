@@ -520,50 +520,59 @@ async function writePaymentHistory(
     .filter((r) => r.type === type && r.dataSource === dataSource)
     .toArray();
 
-  const incoming = new Map<number, Omit<PaymentHistory, 'id'>>();
-  for (const row of rows) {
-    incoming.set(row.date.getTime(), {
-      assetId,
-      amount: row.amount,
-      date: row.date,
-      type,
-      dataSource,
-      ...(row.isForecast ? { isForecast: true } : {}),
+  // A date may carry several payments (two dividends with one record date), so rows are
+  // matched per date as a multiset, never keyed by the date alone.
+  const incoming = groupByDate(rows.map((row): Omit<PaymentHistory, 'id'> => ({
+    assetId,
+    amount: row.amount,
+    date: row.date,
+    type,
+    dataSource,
+    ...(row.isForecast ? { isForecast: true } : {}),
+  })));
+  const stored = groupByDate(existing);
+
+  const toDelete: number[] = [];
+  const toUpdate: { key: number; changes: Partial<PaymentHistory> }[] = [];
+  const toAdd: Omit<PaymentHistory, 'id'>[] = [];
+  const same = (a: Pick<PaymentHistory, 'amount' | 'isForecast'>, b: Pick<PaymentHistory, 'amount' | 'isForecast'>) =>
+    a.amount === b.amount && (a.isForecast === true) === (b.isForecast === true);
+
+  for (const [time, records] of stored) {
+    const next = incoming.get(time) ?? [];
+    // Unchanged rows keep their ids; the rest are paired up in order and updated in place.
+    const leftover = records.filter((record) => {
+      const i = next.findIndex((n) => same(n, record));
+      if (i < 0) return true;
+      next.splice(i, 1);
+      return false;
     });
+    for (const record of leftover) {
+      const n = next.shift();
+      if (n) toUpdate.push({ key: record.id!, changes: { amount: n.amount, isForecast: n.isForecast } });
+      else toDelete.push(record.id!);
+    }
+    toAdd.push(...next);
+    incoming.delete(time);
   }
+  for (const records of incoming.values()) toAdd.push(...records);
 
   await db.transaction('rw', db.paymentHistory, async () => {
-    const seenExistingKeys = new Set<number>();
-
-    for (const record of existing) {
-      const key = record.date.getTime();
-      const next = incoming.get(key);
-
-      if (!next || seenExistingKeys.has(key)) {
-        await db.paymentHistory.delete(record.id!);
-        continue;
-      }
-
-      seenExistingKeys.add(key);
-      const nextIsForecast = next.isForecast === true;
-      const currentIsForecast = record.isForecast === true;
-      if (record.amount !== next.amount || currentIsForecast !== nextIsForecast) {
-        await db.paymentHistory.update(record.id!, {
-          amount: next.amount,
-          isForecast: next.isForecast,
-        });
-      }
-    }
-
-    const existingKeys = new Set(existing.map((record) => record.date.getTime()));
-    const newRecords = [...incoming.entries()]
-      .filter(([key]) => !existingKeys.has(key))
-      .map(([, record]) => record);
-
-    if (newRecords.length > 0) {
-      await db.paymentHistory.bulkAdd(newRecords);
-    }
+    if (toDelete.length > 0) await db.paymentHistory.bulkDelete(toDelete);
+    if (toUpdate.length > 0) await db.paymentHistory.bulkUpdate(toUpdate);
+    if (toAdd.length > 0) await db.paymentHistory.bulkAdd(toAdd);
   });
+}
+
+function groupByDate<T extends { date: Date }>(records: T[]): Map<number, T[]> {
+  const groups = new Map<number, T[]>();
+  for (const record of records) {
+    const time = record.date.getTime();
+    const group = groups.get(time);
+    if (group) group.push(record);
+    else groups.set(time, [record]);
+  }
+  return groups;
 }
 
 // ============ Payment-only sync ============

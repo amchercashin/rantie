@@ -89,7 +89,7 @@ describe('portfolio-calculator', () => {
       assets: [asset({ id: 1, type: 'Крипта', currentPrice: 3000, currency: 'USD', paymentPerUnit: 40, paymentPerUnitSource: 'manual' })],
       holdings: [holding({ assetId: 1, quantity: 1 })],
       paymentHistory: [],
-      ndflRates: new Map([['Крипта', 13]]),
+      ndflRates: new Map([[1, 13]]),
       exchangeRates: new Map([['USD', 82.5]]),
       now: new Date('2026-04-28'),
     });
@@ -164,12 +164,66 @@ describe('portfolio-calculator', () => {
       assets: [asset({ id: 1, currentPrice: 100 })],
       holdings: [holding({ assetId: 1, quantity: 10 })],
       paymentHistory: history,
-      ndflRates: new Map([['Акции', 13]]),
+      ndflRates: new Map([[1, 13]]),
       exchangeRates: new Map(),
       now: new Date('2026-04-28'),
     });
 
     expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(87);
     expect(snapshot.portfolio.totalIncomePerMonth).toBeCloseTo(7.25);
+  });
+  describe('NDFL rate of the account', () => {
+    const base = {
+      assets: [asset({ id: 1, currentPrice: 100, paymentPerUnit: 12, paymentPerUnitSource: 'manual' as const })],
+      paymentHistory: [],
+      exchangeRates: new Map<string, number>(),
+      now: new Date('2026-04-28'),
+    };
+
+    it('taxes each holding at its account rate, averaged by quantity', () => {
+      const snapshot = calculatePortfolioSnapshot({
+        ...base,
+        holdings: [holding({ id: 1, accountId: 1, quantity: 40 }), holding({ id: 2, accountId: 2, quantity: 10 })],
+        ndflRates: new Map([[1, 13], [2, 0]]),
+      });
+
+      // 40 × 12 × 0.87 + 10 × 12 = 537.6 a year
+      expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(537.6);
+      const stats = snapshot.assetsById.get(1)!;
+      expect(stats.taxMultiplier).toBeCloseTo(0.896);
+      expect(stats.taxed).toBe(true);
+    });
+
+    it('an account at 0% makes its income gross, and every level says so', () => {
+      const snapshot = calculatePortfolioSnapshot({
+        ...base,
+        holdings: [holding({ accountId: 2, quantity: 10 })],
+        ndflRates: new Map([[1, 13], [2, 0]]),
+      });
+
+      expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(120);
+      expect(snapshot.assetsById.get(1)!.taxed).toBe(false);
+      expect(snapshot.categories[0].taxed).toBe(false);
+      expect(snapshot.portfolio.taxed).toBe(false);
+    });
+
+    it('a taxed account marks its category and the portfolio taxed', () => {
+      const snapshot = calculatePortfolioSnapshot({
+        ...base,
+        holdings: [holding({ accountId: 3, quantity: 10 })],
+        ndflRates: new Map([[3, 4]]),
+      });
+
+      expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(115.2);
+      expect(snapshot.categories[0].taxed).toBe(true);
+      expect(snapshot.portfolio.taxed).toBe(true);
+    });
+
+    it('an asset nobody holds is untaxed and earns nothing', () => {
+      const snapshot = calculatePortfolioSnapshot({ ...base, holdings: [], ndflRates: new Map([[1, 13]]) });
+      expect(snapshot.assetsById.get(1)!.taxMultiplier).toBe(1);
+      expect(snapshot.portfolio.totalIncomePerMonth).toBe(0);
+      expect(snapshot.portfolio.taxed).toBe(false);
+    });
   });
 });

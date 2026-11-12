@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { migrateDbName } from './db/migrate-db-name';
+import { migrateNdflToAccounts } from './services/app-settings';
 import { listenForInstallPrompt } from './lib/install-prompt';
 import App from './App';
 import './index.css';
@@ -56,6 +57,8 @@ function runSplash(): void {
 // would hide the real error from the error boundary.
 migrateDbName()
   .catch((err) => console.error('DB name migration check failed:', err))
+  // NDFL rates moved from categories to accounts: carry over what the user had set.
+  .then(() => migrateNdflToAccounts().catch((err) => console.error('NDFL rates migration failed:', err)))
   .then(() => {
     createRoot(document.getElementById('root')!).render(
       <StrictMode>

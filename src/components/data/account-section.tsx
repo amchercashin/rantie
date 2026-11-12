@@ -6,6 +6,8 @@ import { getTypeColor } from '@/models/account';
 import { cn, formatCurrency, formatMoney, formatNumber, plural } from '@/lib/utils';
 import { updateAccount, deleteAccount } from '@/hooks/use-accounts';
 import { useExchangeRateMap } from '@/hooks/use-exchange-rates';
+import { useNdflRates } from '@/hooks/use-ndfl-rates';
+import { ndflAccountLabel } from '@/services/ndfl-rates';
 import { getRateToRub } from '@/services/exchange-rates';
 import { Card, AssetAvatar, CategoryDot } from '@/components/ds/surface';
 import { Badge } from '@/components/ds/badge';
@@ -43,6 +45,7 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
   const [editOpen, setEditOpen] = useState(false);
   const highlightRowRef = useRef<HTMLButtonElement>(null);
   const exchangeRates = useExchangeRateMap();
+  const ndflRates = useNdflRates();
   const { confirm, toast } = useFeedback();
 
   useEffect(() => {
@@ -81,6 +84,8 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
       .sort((a, b) => b.value - a.value);
   }, [rows]);
   const fromImport = holdings.length > 0 && holdings.every((h) => h.quantitySource === 'import');
+  // Set in Настройки → НДФЛ; shown only when it isn't the usual 13%.
+  const ndflLabel = ndflAccountLabel(account.id != null ? ndflRates.get(account.id) : undefined);
 
   const removeAccount = async () => {
     setMenuOpen(false);
@@ -114,6 +119,7 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
             </div>
             <div className="mt-0.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
               {holdings.length} {plural(holdings.length, ['позиция', 'позиции', 'позиций'])} · {formatCurrency(totalValue)}
+              {ndflLabel && ` · ${ndflLabel}`}
             </div>
           </div>
           <ChevronDown className={cn('size-4 shrink-0 text-[var(--hi-text-3)] transition-transform duration-300', expanded && 'rotate-180')} />

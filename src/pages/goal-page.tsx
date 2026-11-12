@@ -17,7 +17,6 @@ import { useIncomeGoal } from '@/hooks/use-income-goal';
 import { useGoalPlan } from '@/hooks/use-goal-plan';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { goalProgress, setGoalPlan, setIncomeGoal, type GoalPlan } from '@/services/income-goal';
-import { forecastYieldPercent } from '@/services/goal-forecast';
 import type { CalculatedAssetStats } from '@/services/portfolio-calculator';
 import { cn, formatIncome, formatPercent } from '@/lib/utils';
 import { readStorage, writeStorage } from '@/lib/safe-storage';
@@ -106,7 +105,8 @@ function GoalPlanner({ stats, goal, initialGoal, initialPlan }: GoalPlannerProps
   );
 
   const assets = useMemo(() => [...assetsById.values()], [assetsById]);
-  const portfolioYield = useMemo(() => forecastYieldPercent(assets), [assets]);
+  // The portfolio's own yield already leaves out assets without a price (see `calculatePortfolioSnapshot`).
+  const portfolioYield = portfolio.yieldPercent;
   const unpricedIncome = useMemo(
     () => assets.some((a: CalculatedAssetStats) => !(a.value > 0) && a.incomePerYear > 0 && !a.rateMissing),
     [assets],

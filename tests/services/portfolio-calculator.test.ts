@@ -100,6 +100,60 @@ describe('portfolio-calculator', () => {
     expect(snapshot.portfolio.totalValue).toBeCloseTo(3000 * 82.5);
   });
 
+  it('counts the income of an asset without a price, but keeps it out of the yield', () => {
+    const snapshot = calculatePortfolioSnapshot({
+      assets: [
+        asset({ id: 1, currentPrice: 1000, paymentPerUnit: 100, paymentPerUnitSource: 'manual' }),
+        asset({ id: 2, type: 'Крипта', paymentPerUnit: 25, paymentPerUnitSource: 'manual' }),
+        asset({ id: 3, type: 'Крипта', currentPrice: 500, paymentPerUnit: 20, paymentPerUnitSource: 'manual' }),
+      ],
+      holdings: [
+        holding({ id: 1, assetId: 1, quantity: 1 }),
+        holding({ id: 2, assetId: 2, quantity: 2 }),
+        holding({ id: 3, assetId: 3, quantity: 1 }),
+      ],
+      paymentHistory: [],
+      ndflRates: new Map(),
+      exchangeRates: new Map(),
+      now: new Date('2026-04-28'),
+    });
+
+    // The income is all there: 100 + 2 × 25 + 20.
+    expect(snapshot.portfolio.totalIncomePerYear).toBeCloseTo(170);
+    expect(snapshot.portfolio.totalValue).toBe(1500);
+    // Yield of the priced assets only: 120 / 1500, not 170 / 1500.
+    expect(snapshot.portfolio.yieldPercent).toBeCloseTo(8, 9);
+
+    const crypto = snapshot.categories.find((c) => c.type === 'Крипта');
+    expect(crypto?.totalIncomePerYear).toBeCloseTo(70);
+    expect(crypto?.totalValue).toBe(500);
+    expect(crypto?.yieldPercent).toBeCloseTo(4, 9);
+
+    const unpriced = snapshot.assetsById.get(2);
+    expect(unpriced?.incomePerYear).toBeCloseTo(50);
+    expect(unpriced?.value).toBe(0);
+    expect(unpriced?.portfolioSharePercent).toBe(0);
+  });
+
+  it('has no yield when no asset has a price — whether the price is empty or 0', () => {
+    const snapshot = calculatePortfolioSnapshot({
+      assets: [
+        asset({ id: 1, type: 'Крипта', paymentPerUnit: 12, paymentPerUnitSource: 'manual' }),
+        asset({ id: 2, type: 'Крипта', currentPrice: 0, paymentPerUnit: 24, paymentPerUnitSource: 'manual' }),
+      ],
+      holdings: [holding({ id: 1, assetId: 1, quantity: 1 }), holding({ id: 2, assetId: 2, quantity: 1 })],
+      paymentHistory: [],
+      ndflRates: new Map(),
+      exchangeRates: new Map(),
+      now: new Date('2026-04-28'),
+    });
+
+    expect(snapshot.portfolio.totalIncomePerMonth).toBeCloseTo(3);
+    expect(snapshot.portfolio.totalValue).toBe(0);
+    expect(snapshot.portfolio.yieldPercent).toBeNull();
+    expect(snapshot.categories[0].yieldPercent).toBeNull();
+  });
+
   it('uses fact payments, excludes forecasts, and applies NDFL', () => {
     const history: PaymentHistory[] = [
       { assetId: 1, amount: 10, date: new Date('2026-01-01'), type: 'dividend', dataSource: 'moex' },

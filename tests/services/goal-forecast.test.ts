@@ -3,7 +3,6 @@ import {
   FORECAST_HORIZON_MONTHS,
   capitalPath,
   describeWait,
-  forecastYieldPercent,
   goalDate,
   incomePath,
   monthsToGoal,
@@ -98,22 +97,6 @@ describe('capitalPath', () => {
     const capital = capitalPath({ incomePerMonth: 0, yieldPercent: 8, capital: 0, monthly: 10_000, months: 2 });
     expect(capital).toEqual([0, 10_000, expect.any(Number)]);
     expect(capital[2]).toBeGreaterThan(20_000);
-  });
-});
-
-describe('forecastYieldPercent', () => {
-  it('takes the yield of the assets whose value is known, so rent without a price does not inflate it', () => {
-    expect(
-      forecastYieldPercent([
-        { value: 1_000_000, incomePerYear: 100_000 },
-        { value: 0, incomePerYear: 504_000 },
-      ]),
-    ).toBeCloseTo(10, 9);
-  });
-
-  it('is null when no value is known at all', () => {
-    expect(forecastYieldPercent([{ value: 0, incomePerYear: 504_000 }])).toBeNull();
-    expect(forecastYieldPercent([])).toBeNull();
   });
 });
 

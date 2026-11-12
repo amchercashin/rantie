@@ -74,22 +74,6 @@ export function monthsToGoal(input: ForecastInput & { goalPerMonth: number }): n
   return index === -1 ? null : index;
 }
 
-/**
- * Yield to grow the portfolio by: income of the assets with a known value ÷ their value, %.
- * An asset with income but no price (rent from a flat whose price was never entered) would otherwise
- * make every reinvested ruble look like it buys far more income than it does. Null when no value is known.
- */
-export function forecastYieldPercent(assets: Iterable<{ value: number; incomePerYear: number }>): number | null {
-  let value = 0;
-  let income = 0;
-  for (const asset of assets) {
-    if (!(asset.value > 0)) continue;
-    value += asset.value;
-    income += asset.incomePerYear;
-  }
-  return value > 0 ? (income / value) * 100 : null;
-}
-
 /** The month the goal is reached, counted from today. */
 export function goalDate(months: number, now: Date = new Date()): Date {
   return new Date(now.getFullYear(), now.getMonth() + months, 1, 12);

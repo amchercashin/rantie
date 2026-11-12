@@ -106,14 +106,16 @@ export function AssetDetailPage() {
   const taxed = (ndflRates.get(asset.type) ?? 0) > 0;
   // Without a rate the ruble figures are unknown — show dashes, not a misleading 0 ₽.
   const rateMissing = stats?.rateMissing ?? false;
+  // Without a price the value is unknown too, and so are the yield and the share; the income is not.
+  const valueKnown = !rateMissing && (stats?.value ?? 0) > 0;
 
   return (
     <AppShell back={`/category/${encodeURIComponent(asset.type)}`} title={asset.name} subtitle={identifiers}>
       <SummaryCard
         incomePerMonth={rateMissing ? null : stats?.incomePerMonth ?? 0}
-        totalValue={rateMissing ? null : stats?.value ?? 0}
-        yieldPercent={rateMissing ? null : stats?.yieldPercent ?? null}
-        portfolioSharePercent={rateMissing ? null : stats?.portfolioSharePercent ?? null}
+        totalValue={valueKnown ? stats?.value ?? null : null}
+        yieldPercent={valueKnown ? stats?.yieldPercent ?? null : null}
+        portfolioSharePercent={valueKnown ? stats?.portfolioSharePercent ?? null : null}
         badges={<SourceBadge source={isManual ? 'manual' : 'fact'} />}
         taxed={taxed}
       />

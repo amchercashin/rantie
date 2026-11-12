@@ -30,6 +30,38 @@ export interface DohodDividendRow {
   isForecast: boolean;
 }
 
+// ---- smart-lab types ----
+
+/**
+ * paid — the register has closed; canceled; upcoming: recommended (by the board of directors),
+ * forecast, or expected (listed as upcoming, but smart-lab's calendar does not say which).
+ */
+export type SmartlabStatus = 'paid' | 'canceled' | 'recommended' | 'forecast' | 'expected';
+
+interface SmartlabPayment {
+  recordDate: string;
+  lastBuyDate: string | null;
+  period: string | null;
+  amount: number | null;
+  currency: string | null;
+  status: SmartlabStatus;
+  /** The ticker smart-lab lists the row under, when it is a renamed company's old one. */
+  listedAs?: string;
+}
+
+interface SmartlabTickerData {
+  ticker: string;
+  page: string;
+  scrapedAt: string;
+  payments: SmartlabPayment[];
+}
+
+export interface SmartlabDividendRow {
+  date: Date;
+  amount: number;
+  status: SmartlabStatus;
+}
+
 // ---- Fund distribution types ----
 
 interface FundDistributionRaw {
@@ -90,15 +122,22 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 // an unreachable GitHub costs one timeout, not one per security.
 
 let stockIndex: Promise<DohodIndex | null> | undefined;
+let smartlabIndex: Promise<DohodIndex | null> | undefined;
 let fundIndex: Promise<FundIndex | null> | undefined;
 
+/** Forgets every index of heroincome-data (dohod.ru, smart-lab, funds) before a full sync. */
 export function resetDohodCache(): void {
   stockIndex = undefined;
+  smartlabIndex = undefined;
   fundIndex = undefined;
 }
 
 function fetchDohodIndex(): Promise<DohodIndex | null> {
   return (stockIndex ??= fetchJson<DohodIndex>(`${BASE_URL}/stocks/dohod/index.json`));
+}
+
+function fetchSmartlabIndex(): Promise<DohodIndex | null> {
+  return (smartlabIndex ??= fetchJson<DohodIndex>(`${BASE_URL}/stocks/smartlab/index.json`));
 }
 
 function fetchFundIndex(): Promise<FundIndex | null> {
@@ -111,6 +150,10 @@ function fetchFundIndex(): Promise<FundIndex | null> {
  */
 export async function isDohodIndexLoaded(): Promise<boolean> {
   return (await fetchDohodIndex()) != null;
+}
+
+export async function isSmartlabIndexLoaded(): Promise<boolean> {
+  return (await fetchSmartlabIndex()) != null;
 }
 
 export async function isFundIndexLoaded(): Promise<boolean> {
@@ -135,6 +178,27 @@ export async function fetchDohodDividends(ticker: string): Promise<DohodDividend
   return data.payments
     .filter((p) => p.amount != null && p.recordDate && (p.amount > 0 || p.isForecast))
     .map((p) => ({ date: new Date(p.recordDate), amount: p.amount!, isForecast: p.isForecast }));
+}
+
+// ---- Stock smart-lab ----
+
+export async function isSmartlabAvailable(ticker: string): Promise<boolean> {
+  const index = await fetchSmartlabIndex();
+  if (!index) return false;
+  return index.tickers.includes(ticker.toUpperCase());
+}
+
+/**
+ * smart-lab rows of a stock, or null when it is not listed or the file failed to load.
+ * Only ruble amounts: a dividend in another currency would be summed with rubles.
+ */
+export async function fetchSmartlabDividends(ticker: string): Promise<SmartlabDividendRow[] | null> {
+  if (!(await isSmartlabAvailable(ticker))) return null;
+  const data = await fetchJson<SmartlabTickerData>(`${BASE_URL}/stocks/smartlab/${ticker.toUpperCase()}.json`);
+  if (!Array.isArray(data?.payments)) return null;
+  return data.payments
+    .filter((p) => p.amount != null && p.amount > 0 && p.recordDate && (p.currency == null || p.currency === 'RUB'))
+    .map((p) => ({ date: new Date(p.recordDate), amount: p.amount!, status: p.status }));
 }
 
 // ---- Fund distributions ----

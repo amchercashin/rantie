@@ -12,6 +12,7 @@ const BAR_H = 128;
 
 const BASIS_LABEL: Record<ProjectedPayment['basis'], string> = {
   forecast: 'прогноз',
+  recommended: 'рекомендовано',
   scheduled: 'ожидается',
   'last-year': 'как год назад',
   average: 'средняя выплата',

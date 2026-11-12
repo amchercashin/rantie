@@ -71,6 +71,16 @@ describe('projectIncome', () => {
     expect(projection[0]).toMatchObject({ perUnit: 40, basis: 'forecast' });
   });
 
+  it('a forecast the board has recommended reads «рекомендовано»', () => {
+    const { projection } = run(
+      [stock({ id: 1 })],
+      [holding(1, 1)],
+      [payment(1, '2026-07-18', 36), payment(1, '2027-07-10', 40, { isForecast: true, recommended: true })],
+    );
+    expect(projection).toHaveLength(1);
+    expect(projection[0]).toMatchObject({ perUnit: 40, basis: 'recommended' });
+  });
+
   it('keeps a forecast apart from a real record dated in the future', () => {
     // Neither says the dividend is declared: dohod.ru forecasts carry no stage,
     // and a future MOEX/hand-typed record is just a date.

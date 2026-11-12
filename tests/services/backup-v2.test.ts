@@ -95,6 +95,29 @@ describe('backup v3', () => {
     expect(assets[0].createdAt).toBeInstanceOf(Date);
   });
 
+  it('keeps the board recommendation of a forecast', async () => {
+    const now = new Date();
+    await db.accounts.add({ name: 'Сбер', createdAt: now, updatedAt: now });
+    await db.assets.add({
+      type: 'Акции', ticker: 'LKOH', name: 'Лукойл',
+      paymentPerUnitSource: 'fact', frequencyPerYear: 2, frequencySource: 'moex',
+      dataSource: 'moex', createdAt: now, updatedAt: now,
+    });
+    await db.holdings.add({ accountId: 1, assetId: 1, quantity: 1, quantitySource: 'import', createdAt: now, updatedAt: now });
+    await db.paymentHistory.bulkAdd([
+      { assetId: 1, amount: 535, date: new Date('2026-12-09'), type: 'dividend', dataSource: 'dohod', isForecast: true, recommended: true },
+      { assetId: 1, amount: 550, date: new Date('2027-05-04'), type: 'dividend', dataSource: 'smartlab', isForecast: true },
+    ]);
+
+    await importAllData(await exportAllData());
+
+    const history = (await db.paymentHistory.toArray()).sort((a, b) => a.amount - b.amount);
+    expect(history.map((p) => [p.dataSource, p.isForecast, p.recommended])).toEqual([
+      ['dohod', true, true],
+      ['smartlab', true, undefined],
+    ]);
+  });
+
   it('import clears existing data before restoring', async () => {
     const now = new Date();
     await db.accounts.add({ name: 'Old', createdAt: now, updatedAt: now });

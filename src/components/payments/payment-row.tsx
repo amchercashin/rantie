@@ -15,9 +15,10 @@ export function PaymentRow({ payment, currency, onDelete }: PaymentRowProps) {
   return (
     <div className={cn('group flex items-center gap-3 py-2 pl-4 pr-1.5', payment.isForecast && 'opacity-70')}>
       <span className="w-[86px] shrink-0 text-[length:var(--hi-text-caption)] text-[var(--hi-text-2)]">{formatNumericDate(payment.date)}</span>
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+      {/* Two badges («smart-lab» + «рекомендовано») don't fit next to the amount on a phone: they wrap. */}
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
         <SourceBadge source={source} />
-        {payment.isForecast && <SourceBadge source="forecast" />}
+        {payment.isForecast && <SourceBadge source={payment.recommended ? 'recommended' : 'forecast'} />}
       </span>
       <span className="shrink-0 text-right text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-text)]">
         {formatPrice(payment.amount, currency)}

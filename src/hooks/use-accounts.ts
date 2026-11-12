@@ -15,18 +15,6 @@ export async function updateAccount(id: number, changes: Partial<Account>): Prom
   await db.accounts.update(id, { ...changes, updatedAt: new Date() });
 }
 
-/** Own NDFL rate for every holding of the account; null returns it to the category rates. */
-export async function setAccountNdflRate(id: number, rate: number | null): Promise<void> {
-  await db.transaction('rw', db.accounts, async () => {
-    const account = await db.accounts.get(id);
-    if (!account) return;
-    const next: Account = { ...account, updatedAt: new Date() };
-    if (rate == null) delete next.ndflRate;
-    else next.ndflRate = rate;
-    await db.accounts.put(next);
-  });
-}
-
 export async function deleteAccount(id: number): Promise<void> {
   await db.transaction('rw', db.accounts, db.holdings, db.assets, db.paymentHistory, async () => {
     const holdings = await db.holdings.where('accountId').equals(id).toArray();

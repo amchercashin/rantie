@@ -15,6 +15,7 @@ import { MoneyField, blurOnEnter, draftOf } from '@/components/goal/money-field'
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
 import { useIncomeGoal } from '@/hooks/use-income-goal';
 import { useGoalPlan } from '@/hooks/use-goal-plan';
+import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { goalProgress, setGoalPlan, setIncomeGoal, type GoalPlan } from '@/services/income-goal';
 import type { CalculatedAssetStats } from '@/services/portfolio-calculator';
 import { cn, formatIncome, formatPercent } from '@/lib/utils';
@@ -87,9 +88,10 @@ interface GoalPlannerProps {
 }
 
 function GoalPlanner({ stats, goal, initialGoal, initialPlan }: GoalPlannerProps) {
-  const { portfolio, assetsById, missingRates } = stats;
+  const { portfolio, categories, assetsById, missingRates } = stats;
   const { toast, confirm } = useFeedback();
-  const taxed = portfolio.taxed;
+  const ndflRates = useNdflRates();
+  const taxed = categories.some((c) => (ndflRates.get(c.type) ?? 0) > 0);
   const { schedule, flush, cancel } = useDeferredSave();
 
   const [goalDraft, setGoalDraft] = useState(() => draftOf(initialGoal));

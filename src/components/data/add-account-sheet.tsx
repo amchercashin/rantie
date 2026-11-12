@@ -75,11 +75,6 @@ export function AddAccountSheet({ open, onClose, onImport, onCreated }: AddAccou
           </button>
         ))}
       </div>
-      {/иис/i.test(name) && (
-        <p className="mt-3 px-1 text-[length:var(--hi-text-caption)] leading-snug text-[var(--hi-text-3)]">
-          Если у ИИС налоговая льгота, поставьте счёту НДФЛ 0% — в его меню «⋯».
-        </p>
-      )}
     </BottomSheet>
   );
 }

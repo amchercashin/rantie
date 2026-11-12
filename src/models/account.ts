@@ -1,6 +1,11 @@
 export interface Account {
   id?: number;
   name: string;
+  /**
+   * NDFL rate, %, for all income of this account — e.g. 0 for an ИИС with the tax break,
+   * 4 for rent as self-employed. Undefined: the per-category rates from settings apply.
+   */
+  ndflRate?: number;
   createdAt: Date;
   updatedAt: Date;
 }

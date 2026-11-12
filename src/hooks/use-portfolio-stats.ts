@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/database';
 import type { Asset, PortfolioStats, CategoryStats } from '@/models/types';
+import type { Account } from '@/models/account';
 import { calculatePortfolioSnapshot, type CalculatedAssetStats } from '@/services/portfolio-calculator';
 import { projectIncome, incomeTimeline, type ProjectedPayment, type TimelinePoint } from '@/services/income-projection';
 import { getNdflRates } from '@/services/app-settings';
@@ -25,12 +26,14 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
   const holdings = useLiveQuery(() => db.holdings.toArray(), []);
   const allHistory = useLiveQuery(() => db.paymentHistory.toArray(), []);
   const ndflRates = useLiveQuery(() => getNdflRates(), []);
+  const accounts = useLiveQuery(() => db.accounts.toArray(), []);
   const exchangeRates = useLiveQuery(() => db.exchangeRates.toArray(), []);
   const isLoading =
     assets === undefined ||
     holdings === undefined ||
     allHistory === undefined ||
     ndflRates === undefined ||
+    accounts === undefined ||
     exchangeRates === undefined;
 
   return useMemo(() => {
@@ -39,6 +42,7 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
       holdings: holdings ?? [],
       paymentHistory: allHistory ?? [],
       ndflRates: ndflRates ?? new Map<string, number>(),
+      accountNdflRates: accountNdflRatesOf(accounts ?? []),
       exchangeRates: ratesArrayToMap(exchangeRates ?? []),
     };
     const { portfolio, categories, assetsById, missingRates } = calculatePortfolioSnapshot(input);
@@ -46,10 +50,17 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
       assets: input.assets,
       paymentHistory: input.paymentHistory,
       assetsById,
-      ndflRates: input.ndflRates,
     };
     const projection = projectIncome(projectionInput);
     const timeline = withTimeline && !isLoading ? incomeTimeline(projectionInput) : [];
     return { portfolio, categories, assetsById, missingRates, assets: input.assets, projection, timeline, isLoading };
-  }, [assets, holdings, allHistory, ndflRates, exchangeRates, isLoading, withTimeline]);
+  }, [assets, holdings, allHistory, ndflRates, accounts, exchangeRates, isLoading, withTimeline]);
+}
+
+function accountNdflRatesOf(accounts: Account[]): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const a of accounts) {
+    if (a.id != null && typeof a.ndflRate === 'number' && Number.isFinite(a.ndflRate)) map.set(a.id, a.ndflRate);
+  }
+  return map;
 }

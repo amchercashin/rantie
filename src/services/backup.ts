@@ -129,9 +129,15 @@ function parseAccount(value: unknown, index: number): Account {
   return {
     id: parseOptionalId(row.id, `accounts[${index}]`),
     name: parseString(row.name, `accounts[${index}].name`),
+    // A rate outside 0–100% is dropped (the category rates apply) rather than failing the restore.
+    ...(isNdflRate(row.ndflRate) ? { ndflRate: row.ndflRate } : {}),
     createdAt: parseDate(row.createdAt, `accounts[${index}].createdAt`),
     updatedAt: parseDate(row.updatedAt, `accounts[${index}].updatedAt`),
   };
+}
+
+function isNdflRate(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
 }
 
 function parseAsset(value: unknown, index: number): Asset {

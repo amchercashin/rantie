@@ -77,6 +77,11 @@ export function formatPercent(value: number | null | undefined): string {
   return `${(Math.round(value * 10) / 10).toFixed(1).replace('.', ',')}%`;
 }
 
+/** A tax rate as people write it: "13%", "7,5%" (no forced decimal, unlike formatPercent). */
+export function formatRate(value: number): string {
+  return `${String(Math.round(value * 100) / 100).replace('.', ',')}%`;
+}
+
 /** Compact number for chart annotations: "52", "1,2 тыс", "85 тыс". */
 export function formatCompact(value: number): string {
   return formatCompactNumber(value);

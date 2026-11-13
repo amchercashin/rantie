@@ -21,6 +21,7 @@ import { useDemoAccountId } from '@/hooks/use-demo';
 import { useBackupReminder } from '@/hooks/use-backup-reminder';
 import { useIncomeGoal } from '@/hooks/use-income-goal';
 import { InstallCard } from '@/components/install-card';
+import { RestoreBackupLink } from '@/components/onboarding/restore-backup-link';
 import { upcomingPayments } from '@/services/income-projection';
 import { loadDemoPortfolio, removeDemoPortfolio } from '@/services/demo-portfolio';
 import { withViewTransition } from '@/lib/view-transition';
@@ -168,6 +169,9 @@ export function MainPage() {
           <Button variant="ghost" size="md" block onClick={startDemo}>
             Посмотреть на демо-портфеле
           </Button>
+          <div className="pt-3">
+            <RestoreBackupLink />
+          </div>
         </EmptyState>
       ) : (
         <>

@@ -5,6 +5,7 @@ import { ArrowRight, Bot, FileUp, Landmark, LineChart, Lock, PenLine, Sparkles }
 import { db } from '@/db/database';
 import { BrandMark, Wordmark } from '@/components/ds/brand-mark';
 import { Button } from '@/components/ds/button';
+import { RestoreBackupLink } from '@/components/onboarding/restore-backup-link';
 import { isWelcomeDone, markWelcomeDone } from '@/lib/hints';
 import { loadDemoPortfolio } from '@/services/demo-portfolio';
 import { withViewTransition } from '@/lib/view-transition';
@@ -67,7 +68,8 @@ function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: 
 
 /**
  * First-launch welcome: what the app is about, then a choice of how to start
- * (import, manual, or a demo portfolio). Shown once; can be replayed from settings.
+ * (import, manual, or a demo portfolio — and, quietly below them, a backup for someone moving
+ * from another phone or browser). Shown once; can be replayed from settings.
  */
 export function Welcome() {
   const [visible, setVisible] = useState(false);
@@ -202,9 +204,11 @@ export function Welcome() {
             <Button variant="primary" size="lg" block icon={<FileUp />} onClick={() => openData('import')}>
               Импорт отчёта брокера
             </Button>
-            <div className="flex items-center justify-center gap-1.5 pb-1 text-[length:var(--hi-text-micro)] text-[var(--hi-text-3)]">
-              <Bot className="size-3.5" /> Отчёт Сбера или любой другой через ИИ-ассистента
-            </div>
+            {/* The icon sits in the text and the hyphen does not break, so on a narrow phone the line wraps as one phrase. */}
+            <p className="text-balance pb-1 text-[length:var(--hi-text-micro)] leading-snug text-[var(--hi-text-3)]">
+              <Bot className="mr-1.5 inline size-3.5 align-[-3px]" />
+              Отчёт Сбера или любой другой через ИИ{'\u2011'}ассистента
+            </p>
             <Button variant="secondary" size="lg" block icon={<PenLine />} onClick={() => openData('add-account')}>
               Добавить вручную
             </Button>
@@ -212,6 +216,7 @@ export function Welcome() {
               Посмотреть на демо-портфеле
             </Button>
           </div>
+          <RestoreBackupLink className="mt-6" onRestored={() => finish(goHome)} />
         </Slide>
       </div>
 

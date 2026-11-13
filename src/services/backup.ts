@@ -5,6 +5,9 @@ import { normalizeAssetDefaults } from './asset-factory';
 import { normalizeCurrency } from './exchange-rates';
 import { legacyNdflToAccounts } from './ndfl-rates';
 
+/** Shown when the picked file is some other JSON (or not JSON at all), not a backup. */
+const NOT_A_BACKUP = 'Это не файл бэкапа Рантье';
+
 interface BackupPayload {
   version: number;
   accounts: Account[];
@@ -29,6 +32,17 @@ export async function exportAllData(): Promise<string> {
     exchangeRates: await db.exchangeRates.toArray(),
   };
   return JSON.stringify(data, null, 2);
+}
+
+export interface BackupSummary {
+  accounts: number;
+  assets: number;
+}
+
+/** Checks a backup without touching the database; throws with a message meant for the user. */
+export function readBackupSummary(json: string): BackupSummary {
+  const data = parseBackup(json);
+  return { accounts: data.accounts.length, assets: data.assets.length };
 }
 
 export async function importAllData(json: string): Promise<void> {
@@ -60,10 +74,10 @@ function parseBackup(json: string): BackupPayload {
   try {
     raw = JSON.parse(json);
   } catch {
-    throw new Error('Невалидный формат: некорректный JSON');
+    throw new Error(NOT_A_BACKUP);
   }
 
-  const data = asRecord(raw, 'Невалидный формат данных');
+  const data = asRecord(raw, NOT_A_BACKUP);
   if (
     typeof data.version !== 'number' ||
     data.version < 3 ||
@@ -71,29 +85,34 @@ function parseBackup(json: string): BackupPayload {
     !Array.isArray(data.assets) ||
     !Array.isArray(data.holdings)
   ) {
-    throw new Error('Невалидный формат: требуется версия 3 с accounts, assets и holdings');
+    throw new Error(NOT_A_BACKUP);
   }
 
-  const accounts = data.accounts.map((row, i) => parseAccount(row, i));
-  const assets = data.assets.map((row, i) => parseAsset(row, i));
-  const holdings = arrayOrEmpty(data.holdings).map((row, i) => parseHolding(row, i));
-  const paymentHistory = arrayOrEmpty(data.paymentHistory).map((row, i) => parsePayment(row, i));
-  const importRecords = arrayOrEmpty(data.importRecords).map((row, i) => parseImportRecord(row, i));
-  const settings = arrayOrEmpty(data.settings).map((row, i) => parseSetting(row, i));
-  const exchangeRates = arrayOrEmpty(data.exchangeRates).map((row, i) => parseExchangeRate(row, i));
+  try {
+    const accounts = data.accounts.map((row, i) => parseAccount(row, i));
+    const assets = data.assets.map((row, i) => parseAsset(row, i));
+    const holdings = arrayOrEmpty(data.holdings).map((row, i) => parseHolding(row, i));
+    const paymentHistory = arrayOrEmpty(data.paymentHistory).map((row, i) => parsePayment(row, i));
+    const importRecords = arrayOrEmpty(data.importRecords).map((row, i) => parseImportRecord(row, i));
+    const settings = arrayOrEmpty(data.settings).map((row, i) => parseSetting(row, i));
+    const exchangeRates = arrayOrEmpty(data.exchangeRates).map((row, i) => parseExchangeRate(row, i));
 
-  validateRelations(accounts, assets, holdings, paymentHistory);
+    validateRelations(accounts, assets, holdings, paymentHistory);
 
-  return {
-    version: data.version,
-    accounts,
-    assets,
-    holdings,
-    paymentHistory,
-    importRecords,
-    settings,
-    exchangeRates,
-  };
+    return {
+      version: data.version,
+      accounts,
+      assets,
+      holdings,
+      paymentHistory,
+      importRecords,
+      settings,
+      exchangeRates,
+    };
+  } catch (err) {
+    // A backup, but a broken one: keep the details, they say which row is wrong.
+    throw new Error(`Файл бэкапа повреждён: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function asRecord(value: unknown, message: string): Record<string, unknown> {

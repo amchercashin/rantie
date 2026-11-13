@@ -87,11 +87,11 @@ describe('backup v3', () => {
       assets: [{ id: 1, type: 'stock', name: 'SBER' }],
       paymentHistory: [],
     });
-    await expect(importAllData(json)).rejects.toThrow('версия 3');
+    await expect(importAllData(json)).rejects.toThrow('не файл бэкапа');
   });
 
   it('rejects invalid JSON', async () => {
-    await expect(importAllData('not json')).rejects.toThrow('JSON');
+    await expect(importAllData('not json')).rejects.toThrow('не файл бэкапа');
   });
 
   it('exports empty database', async () => {
@@ -196,7 +196,7 @@ describe('backup v3', () => {
   });
 
   it('rejects JSON without required arrays', async () => {
-    await expect(importAllData(JSON.stringify({ foo: 'bar' }))).rejects.toThrow('версия 3');
+    await expect(importAllData(JSON.stringify({ foo: 'bar' }))).rejects.toThrow('не файл бэкапа');
   });
 
   it('rejects holdings that reference missing assets without clearing current data', async () => {

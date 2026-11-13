@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CalendarClock, ChevronRight, History, PencilLine, Plus } from 'lucide-react';
 import { withViewTransition } from '@/lib/view-transition';
+import { basisLabel } from '@/lib/payment-basis';
 import { AppShell } from '@/components/layout/app-shell';
 import { SummaryCard } from '@/components/shared/summary-card';
 import { PaymentHistoryChart } from '@/components/shared/payment-history-chart';
@@ -229,7 +230,7 @@ export function AssetDetailPage() {
             <div className="min-w-0 flex-1">
               <div className="text-[length:var(--hi-text-body)] font-semibold text-[var(--hi-text)]">{formatLongDate(next.date)}</div>
               <div className="mt-0.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
-                {perUnitLabel ? `${formatPrice(next.perUnit, currency)} ${perUnitLabel} · ` : ''}{next.basis === 'forecast' ? 'прогноз' : next.basis === 'recommended' ? 'рекомендовано' : next.estimated ? 'дата условная' : 'ожидается'}
+                {perUnitLabel ? `${formatPrice(next.perUnit, currency)} ${perUnitLabel} · ` : ''}{basisLabel(next)}
               </div>
             </div>
             <div className="shrink-0 text-right">
@@ -256,12 +257,13 @@ export function AssetDetailPage() {
           />
           <ListRow
             title="Стоимость"
-            trailing={<span className="font-semibold text-[var(--hi-text)]">{formatCurrency(rateMissing ? null : stats?.value ?? null)}</span>}
+            trailing={<span className="font-semibold text-[var(--hi-text)]">{formatCurrency(valueKnown ? stats!.value : null)}</span>}
           />
           {costBasis > 0 && (
             <ListRow
               title="Куплено за"
-              subtitle={stats && stats.value > 0 ? `Доход на вложенное: ${((annualIncome * totalQuantity) / costBasis * 100).toFixed(1).replace('.', ',')}% годовых` : undefined}
+              // Net of NDFL like «Доходность» above; both sides are in the asset's own currency.
+              subtitle={stats && valueKnown ? `Доход на вложенное: ${((annualIncome * totalQuantity * stats.taxMultiplier) / costBasis * 100).toFixed(1).replace('.', ',')}% годовых` : undefined}
               trailing={<span className="font-semibold text-[var(--hi-text)]">{formatMoney(costBasis, currency)}</span>}
             />
           )}

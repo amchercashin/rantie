@@ -28,3 +28,13 @@ export function incomeSpreadOf(asset: Pick<Asset, 'type' | 'ticker' | 'isin' | '
   if (isExchangeTraded(asset)) return 'year';
   return asset.frequencyPerYear > 0 ? 'period' : 'year';
 }
+
+/**
+ * What one unit is worth in its own currency: the price, plus the accrued interest (НКД) for a bond —
+ * what a buyer pays for it. Null without a price: the value is unknown, not zero. The one definition of
+ * value for the capital and the categories (portfolio-calculator) and the Счета tab.
+ */
+export function unitValue(asset: Pick<Asset, 'type' | 'currentPrice' | 'accruedInterest'>): number | null {
+  if (asset.currentPrice == null) return null;
+  return asset.currentPrice + (asset.type === 'Облигации' ? asset.accruedInterest ?? 0 : 0);
+}

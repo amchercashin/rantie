@@ -25,6 +25,11 @@ interface YearData {
 
 const BAR_AREA = 112;
 
+/** Not paid yet: a forecast, or a real record dated in the future. */
+function isAhead(p: ChartPaymentRecord, now: Date): boolean {
+  return !!p.isForecast || p.date > now;
+}
+
 /** What a year paid; a year with nothing paid yet but a forecast tells the forecast as "≈…". */
 function yearTotal(y: YearData): string {
   return y.fact === 0 && y.forecast > 0 ? `≈${formatNumber(y.forecast)}` : formatNumber(y.fact);
@@ -39,11 +44,13 @@ export function PaymentHistoryChart({ history, currency = 'RUB', unitLabel = 'н
 
   const years = useMemo<YearData[]>(() => {
     if (history.length === 0) return [];
+    const now = new Date();
     const map = new Map<number, YearData>();
     for (const p of history) {
       const year = p.date.getFullYear();
       const entry = map.get(year) ?? { year, fact: 0, forecast: 0, payments: [] };
-      if (p.isForecast) entry.forecast += p.amount;
+      // A real record dated ahead (a coupon MOEX has fixed) is not paid yet: it goes on top, hatched.
+      if (isAhead(p, now)) entry.forecast += p.amount;
       else entry.fact += p.amount;
       entry.payments.push(p);
       map.set(year, entry);
@@ -165,10 +172,14 @@ export function PaymentHistoryChart({ history, currency = 'RUB', unitLabel = 'н
           <div className="mt-2 space-y-1">
             {detail.payments.length === 0 && <div className="text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">Выплат не было</div>}
             {detail.payments.map((p, i) => (
-              <div key={i} className={cn('flex justify-between text-[length:var(--hi-text-caption)]', p.isForecast && 'opacity-70')}>
+              <div key={i} className={cn('flex justify-between text-[length:var(--hi-text-caption)]', isAhead(p, new Date()) && 'opacity-70')}>
                 <span className="text-[var(--hi-text-3)]">
                   {formatShortDate(p.date)}
-                  {p.isForecast && <span className="ml-1.5 italic">прогноз</span>}
+                  {p.isForecast ? (
+                    <span className="ml-1.5 italic">прогноз</span>
+                  ) : (
+                    isAhead(p, new Date()) && <span className="ml-1.5 italic">ожидается</span>
+                  )}
                 </span>
                 <span className="text-[var(--hi-text-2)]">{formatNumber(p.amount)} {unit}</span>
               </div>

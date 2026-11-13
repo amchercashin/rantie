@@ -9,6 +9,7 @@ import { useExchangeRateMap } from '@/hooks/use-exchange-rates';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { ndflAccountLabel } from '@/services/ndfl-rates';
 import { getRateToRub } from '@/services/exchange-rates';
+import { unitValue } from '@/models/asset-kind';
 import { Card, AssetAvatar, CategoryDot } from '@/components/ds/surface';
 import { Badge } from '@/components/ds/badge';
 import { BottomSheet } from '@/components/ds/bottom-sheet';
@@ -63,15 +64,18 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
       .map((holding) => {
         const asset = assetById.get(holding.assetId);
         if (!asset) return null;
-        const price = asset.currentPrice ?? holding.averagePrice ?? 0;
-        const valueOwn = price * holding.quantity;
-        const valueRub = valueOwn * getRateToRub(asset.currency, exchangeRates);
+        // The same value as the capital on Доход: price + НКД; without a price it is unknown («—»).
+        const unit = unitValue(asset);
+        const valueOwn = unit == null ? null : unit * holding.quantity;
+        const valueRub = (valueOwn ?? 0) * getRateToRub(asset.currency, exchangeRates);
         return { asset, holding, valueOwn, valueRub };
       })
       .filter((r): r is NonNullable<typeof r> => r != null);
   }, [holdings, assetById, exchangeRates]);
 
   const totalValue = rows.reduce((sum, r) => sum + r.valueRub, 0);
+  // Positions without a price only: the total is unknown («—»), not 0 ₽.
+  const totalKnown = rows.some((r) => r.valueOwn != null);
   const groups = useMemo(() => {
     const map = new Map<string, typeof rows>();
     for (const r of rows) {
@@ -80,7 +84,12 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
       map.set(r.asset.type, arr);
     }
     return [...map.entries()]
-      .map(([type, items]) => ({ type, items: items.sort((a, b) => b.valueRub - a.valueRub), value: items.reduce((s, r) => s + r.valueRub, 0) }))
+      .map(([type, items]) => ({
+        type,
+        items: items.sort((a, b) => b.valueRub - a.valueRub),
+        value: items.reduce((s, r) => s + r.valueRub, 0),
+        known: items.some((r) => r.valueOwn != null),
+      }))
       .sort((a, b) => b.value - a.value);
   }, [rows]);
   const fromImport = holdings.length > 0 && holdings.every((h) => h.quantitySource === 'import');
@@ -118,7 +127,7 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
               {isDemo ? <Badge tone="info">демо</Badge> : fromImport && <Badge tone="neutral">импорт</Badge>}
             </div>
             <div className="mt-0.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
-              {holdings.length} {plural(holdings.length, ['позиция', 'позиции', 'позиций'])} · {formatCurrency(totalValue)}
+              {holdings.length} {plural(holdings.length, ['позиция', 'позиции', 'позиций'])} · {formatCurrency(totalKnown ? totalValue : null)}
               {ndflLabel && ` · ${ndflLabel}`}
             </div>
           </div>
@@ -149,7 +158,7 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
                     <CategoryDot color={getTypeColor(group.type)} className="size-2" />
                     {group.type}
                   </span>
-                  <span className="text-[length:var(--hi-text-micro)] font-semibold text-[var(--hi-text-3)]">{formatCurrency(group.value)}</span>
+                  <span className="text-[length:var(--hi-text-micro)] font-semibold text-[var(--hi-text-3)]">{formatCurrency(group.known ? group.value : null)}</span>
                 </div>
                 {group.items.map(({ asset, holding, valueOwn }) => {
                   const highlighted = highlightAssetId === asset.id;

@@ -28,7 +28,7 @@ export function Badge({ tone = 'neutral', children, className, title }: { tone?:
 }
 
 /** Where a number came from. One vocabulary for the whole app. */
-export type SourceKind = 'fact' | 'manual' | 'moex' | 'dohod' | 'smartlab' | 'parus' | 'import' | 'forecast' | 'recommended' | 'error';
+export type SourceKind = 'fact' | 'manual' | 'moex' | 'dohod' | 'smartlab' | 'parus' | 'import' | 'forecast' | 'recommended' | 'scheduled' | 'error';
 
 const SOURCE: Record<SourceKind, { label: string; tone: BadgeTone; title: string }> = {
   fact: { label: 'факт', tone: 'gold', title: 'Рассчитано по фактическим выплатам за 12 месяцев' },
@@ -39,6 +39,7 @@ const SOURCE: Record<SourceKind, { label: string; tone: BadgeTone; title: string
   parus: { label: 'Парус', tone: 'violet', title: 'Данные управляющей компании «Парус»' },
   import: { label: 'импорт', tone: 'neutral', title: 'Из брокерского отчёта' },
   forecast: { label: 'прогноз', tone: 'neutral', title: 'Ожидаемая выплата, ещё не состоялась' },
+  scheduled: { label: 'ожидается', tone: 'neutral', title: 'Выплата с датой в будущем: в доход войдёт в свой день' },
   recommended: { label: 'рекомендовано', tone: 'positive', title: 'Совет директоров рекомендовал этот дивиденд (по данным smart-lab). Собрание акционеров ещё может его изменить' },
   error: { label: 'ошибка', tone: 'negative', title: 'Не удалось обновить данные' },
 };

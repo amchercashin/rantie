@@ -10,6 +10,7 @@ import {
   fetchBondData,
   fetchDividends,
   fetchCouponHistory,
+  couponRows,
   chunk,
   fetchBatchStockPrices,
   fetchBatchBondData,
@@ -416,16 +417,63 @@ describe('fetchCouponHistory', () => {
     const result = await fetchCouponHistory('SU29010RMFS4');
     // Should have fetched 2 pages
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    // All 20 past page1 coupons + 2 past 2025 coupons from page2 (future ones filtered out)
-    expect(result.length).toBe(22);
+    // 20 past page1 coupons + 2 past 2025 coupons + the 3 coupons ahead within 18 months
+    expect(result.length).toBe(25);
     // Recent coupons from page 2 should be present
     expect(result.some(r => r.amount === 99.33)).toBe(true);
     expect(result.some(r => r.amount === 112.24)).toBe(true);
+    expect(result.filter(r => r.isForecast).map(r => r.date)).toEqual([new Date('2026-12-16'), new Date('2027-06-16')]);
   });
 
   it('returns empty array on error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
     expect(await fetchCouponHistory('SU26238RMFS4')).toEqual([]);
+  });
+});
+
+describe('couponRows', () => {
+  const row = (coupondate: string, value_rub: number | null) => ({ coupondate, value_rub });
+  const now = new Date('2026-11-13T07:00:00Z');
+
+  it('keeps the fixed coupon of the current period as a real payment and later ones as forecasts', () => {
+    // ОФЗ 29010: the December coupon is fixed (НКД is counted from it), later ones are MOEX's placeholder.
+    const result = couponRows([
+      row('2027-06-16', 82.72),
+      row('2025-12-17', 112.24),
+      row('2026-06-17', 95.44),
+      row('2026-12-16', 82.72),
+      row('2027-12-15', 82.72),
+      row('2028-06-14', 82.72),
+    ], now);
+    expect(result).toEqual([
+      { date: new Date('2025-12-17'), amount: 112.24 },
+      { date: new Date('2026-06-17'), amount: 95.44 },
+      { date: new Date('2026-12-16'), amount: 82.72 },
+      { date: new Date('2027-06-16'), amount: 82.72, isForecast: true },
+      { date: new Date('2027-12-15'), amount: 82.72, isForecast: true },
+      // 2028-06-14 is more than 18 months ahead
+    ]);
+  });
+
+  it('skips coupons MOEX does not know yet, the current one included', () => {
+    // A RUONIA floater before its fixing: no amount for the current period and after it.
+    expect(couponRows([
+      row('2026-08-26', 35.15),
+      row('2026-11-25', null),
+      row('2027-02-24', null),
+    ], now)).toEqual([{ date: new Date('2026-08-26'), amount: 35.15 }]);
+  });
+
+  it('does not promote a later coupon to a real one when the nearest is unknown', () => {
+    const result = couponRows([row('2026-11-25', null), row('2027-02-24', 30)], now);
+    expect(result).toEqual([{ date: new Date('2027-02-24'), amount: 30, isForecast: true }]);
+  });
+
+  it('counts a coupon dated today as paid', () => {
+    expect(couponRows([row('2026-11-13', 40), row('2027-05-13', 40)], now)).toEqual([
+      { date: new Date('2026-11-13'), amount: 40 },
+      { date: new Date('2027-05-13'), amount: 40 },
+    ]);
   });
 });
 

@@ -7,6 +7,7 @@ import { useAssets } from '@/hooks/use-assets';
 import { useDemoAccountId } from '@/hooks/use-demo';
 import { useExchangeRateMap } from '@/hooks/use-exchange-rates';
 import { getRateToRub } from '@/services/exchange-rates';
+import { unitValue } from '@/models/asset-kind';
 import { AppShell } from '@/components/layout/app-shell';
 import { AccountSection } from '@/components/data/account-section';
 import { AddAccountSheet } from '@/components/data/add-account-sheet';
@@ -48,8 +49,9 @@ export function DataPage() {
     const byId = new Map(assets.map((a) => [a.id!, a]));
     return holdings.reduce((sum, h) => {
       const a = byId.get(h.assetId);
-      const price = a?.currentPrice ?? h.averagePrice ?? 0;
-      return sum + price * h.quantity * getRateToRub(a?.currency, rates);
+      if (!a) return sum;
+      // The same value as the capital on Доход: price + НКД, and nothing without a price.
+      return sum + (unitValue(a) ?? 0) * h.quantity * getRateToRub(a.currency, rates);
     }, 0);
   }, [assets, holdings, rates]);
 

@@ -1,24 +1,15 @@
 import { useMemo, useState } from 'react';
 import type { Asset } from '@/models/types';
 import { getTypeColor } from '@/models/account';
-import type { MonthBucket, ProjectedPayment } from '@/services/income-projection';
+import type { MonthBucket } from '@/services/income-projection';
 import { Card } from '@/components/ds/surface';
 import { TransitionLink } from '@/components/ui/transition-link';
 import { cn, formatCompact, formatCurrency, formatCurrencyFull } from '@/lib/utils';
+import { basisLabel } from '@/lib/payment-basis';
 
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 const MONTHS_FULL = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 const BAR_H = 128;
-
-const BASIS_LABEL: Record<ProjectedPayment['basis'], string> = {
-  forecast: 'прогноз',
-  recommended: 'рекомендовано',
-  scheduled: 'ожидается',
-  'last-year': 'как год назад',
-  average: 'средняя выплата',
-  'last-payout': 'как последняя выплата',
-  fixed: 'ваша сумма',
-};
 
 interface CashFlowCalendarProps {
   buckets: MonthBucket[];
@@ -147,7 +138,7 @@ export function CashFlowCalendar({ buckets, assetsById }: CashFlowCalendarProps)
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[length:var(--hi-text-body)] text-[var(--hi-text)]">{asset.name}</div>
                 <div className="text-[length:var(--hi-text-micro)] text-[var(--hi-text-3)]">
-                  {BASIS_LABEL[p.basis]}{p.estimated && ' · дата условная'}
+                  {basisLabel(p)}
                 </div>
               </div>
               <span className="shrink-0 text-[length:var(--hi-text-body)] font-semibold text-[var(--hi-text)]">{formatCurrencyFull(p.amount)}</span>

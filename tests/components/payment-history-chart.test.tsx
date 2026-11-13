@@ -68,3 +68,22 @@ describe('PaymentHistoryChart year total', () => {
     expect(screen.getByText('675 ₽')).toBeInTheDocument();
   });
 });
+
+describe('PaymentHistoryChart payments ahead', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 13));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('draws a real record dated ahead (a fixed coupon) on top, not as paid', () => {
+    const coupons: ChartPaymentRecord[] = [
+      { date: new Date(2026, 5, 17), amount: 95.44 },
+      { date: new Date(2026, 11, 16), amount: 82.72 },
+    ];
+    const { container } = render(<PaymentHistoryChart history={coupons} />);
+    fireEvent.click(screen.getByRole('button', { name: '2026: 95,44 ₽' }));
+    expectWholeColumnFramed(container);
+    expect(screen.getByText('ожидается')).toBeInTheDocument();
+  });
+});

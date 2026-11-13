@@ -56,6 +56,8 @@ export interface DividendInfo {
 export interface DividendHistoryRow {
   date: Date;
   amount: number;
+  /** A coupon ahead whose amount is MOEX's schedule, not yet fixed (see couponRows). */
+  isForecast?: boolean;
 }
 
 export interface DividendResult {
@@ -429,6 +431,36 @@ export async function fetchDividends(
   }
 }
 
+/** How far ahead MOEX's coupon schedule is kept: the calendar looks a year ahead, the rest is slack for a sync done a while ago. */
+export const COUPON_SCHEDULE_MONTHS = 18;
+
+/**
+ * A bond's coupons from MOEX's schedule (`bondization`):
+ * - paid coupons — dated today or earlier;
+ * - the nearest coupon ahead, when MOEX states its amount. That is the current period's coupon, and
+ *   it is fixed: the accrued interest (НКД) is counted from it. So it is stored as a real payment dated
+ *   in the future — the calendar shows it as «ожидается», and it counts as income from its date;
+ * - later coupons, up to COUPON_SCHEDULE_MONTHS ahead, as forecasts: a floater's later amounts are only
+ *   MOEX's placeholder (the current coupon repeated), and a fixed coupon is exact but still ahead.
+ * A coupon without an amount is not known yet (a RUONIA floater before its fixing) and is skipped.
+ */
+export function couponRows(rows: Record<string, unknown>[], now: Date): DividendHistoryRow[] {
+  const until = new Date(now);
+  until.setMonth(until.getMonth() + COUPON_SCHEDULE_MONTHS);
+  const dated = rows
+    .filter((r) => r.coupondate)
+    .map((r) => ({ date: new Date(r.coupondate as string), amount: r.value_rub as number | null | undefined }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const nearest = dated.find((r) => r.date > now);
+  const out: DividendHistoryRow[] = [];
+  for (const r of dated) {
+    if (r.amount == null || r.date > until) continue;
+    if (r.date <= now || r === nearest) out.push({ date: r.date, amount: r.amount });
+    else out.push({ date: r.date, amount: r.amount, isForecast: true });
+  }
+  return out;
+}
+
 export async function fetchCouponHistory(
   secid: string,
 ): Promise<DividendHistoryRow[]> {
@@ -437,14 +469,7 @@ export async function fetchCouponHistory(
       `/securities/${secid}/bondization.json`,
       'coupons',
     );
-    const now = new Date();
-    return allRows
-      .filter((r) => r.coupondate && r.value_rub != null && new Date(r.coupondate as string) <= now)
-      .map((r) => ({
-        date: new Date(r.coupondate as string),
-        amount: r.value_rub as number,
-      }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    return couponRows(allRows, new Date());
   } catch {
     return [];
   }

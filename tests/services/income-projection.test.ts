@@ -114,6 +114,29 @@ describe('projectIncome', () => {
     ]);
   });
 
+  it("uses a floater's coupons from MOEX's schedule instead of last year's", () => {
+    // ОФЗ 29010: last year 112.24 and 95.44; the coupon ahead is fixed at 82.72, the next one is MOEX's placeholder.
+    const bond = stock({ id: 1, type: 'Облигации', ticker: 'SU29010RMFS4', frequencyPerYear: 2 });
+    const coupon = (date: string, amount: number, extra: Partial<PaymentHistory> = {}) =>
+      payment(1, date, amount, { type: 'coupon', ...extra });
+    const { snapshot, projection } = run(
+      [bond],
+      [holding(1, 10)],
+      [
+        coupon('2025-12-17', 112.24),
+        coupon('2026-06-17', 95.44),
+        coupon('2026-12-16', 82.72),
+        coupon('2027-06-16', 82.72, { isForecast: true }),
+      ],
+    );
+    // Income today still counts the coupons paid over the last 12 months.
+    expect(snapshot.assetsById.get(1)!.annualIncomePerUnit).toBeCloseTo(112.24 + 95.44);
+    expect(projection.map((p) => [day(p.date), p.perUnit, p.basis])).toEqual([
+      ['2026-12-16', 82.72, 'scheduled'],
+      ['2027-06-16', 82.72, 'forecast'],
+    ]);
+  });
+
   it('treats a zero-amount forecast as "no payment expected"', () => {
     const { projection, timeline } = run(
       [stock({ id: 1 })],

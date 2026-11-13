@@ -4,6 +4,7 @@ import { getTypeColor } from '@/models/account';
 import { Card } from '@/components/ds/surface';
 import { TransitionLink } from '@/components/ui/transition-link';
 import { cn, formatCurrencyFull } from '@/lib/utils';
+import { basisLabel } from '@/lib/payment-basis';
 
 const MONTHS_GEN = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
@@ -57,7 +58,7 @@ export function UpcomingPayments({ payments, assetsById, now = new Date() }: Upc
               <div className="mt-0.5 flex items-center gap-1.5 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
                 <span className="size-1.5 rounded-full" style={{ backgroundColor: getTypeColor(asset.type) }} />
                 <span className="truncate">
-                  {whenLabel(days)} · {p.basis === 'forecast' ? 'прогноз' : p.basis === 'recommended' ? 'рекомендовано' : 'ожидается'}
+                  {whenLabel(days)} · {basisLabel(p)}
                 </span>
               </div>
             </div>

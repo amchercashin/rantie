@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Download, Lightbulb, Sparkles, Trash2, Upload } from 'lucide-react';
 import { withViewTransition } from '@/lib/view-transition';
@@ -7,13 +7,13 @@ import { Card, ListRow, Section } from '@/components/ds/surface';
 import { BrandMark, Wordmark } from '@/components/ds/brand-mark';
 import { useFeedback } from '@/components/ds/feedback';
 import { clearAllData } from '@/services/app-settings';
-import { importAllData } from '@/services/backup';
 import { downloadBackup } from '@/lib/download-backup';
 import { formatBackupAge, getLastBackupAt } from '@/lib/backup-reminder';
 import { removeDemoPortfolio } from '@/services/demo-portfolio';
 import { resetHints } from '@/lib/hints';
 import { guidePath } from '@/lib/guide';
 import { useDemoAccountId } from '@/hooks/use-demo';
+import { useRestoreBackup } from '@/hooks/use-restore-backup';
 import { NdflSettings } from '@/components/settings/ndfl-settings';
 import { ExchangeRatesSettings } from '@/components/settings/exchange-rates-settings';
 import { PrivacyCard } from '@/components/settings/privacy-card';
@@ -36,35 +36,14 @@ function RowIcon({ children, tone = 'gold' }: { children: React.ReactNode; tone?
 export function SettingsPage() {
   const navigate = useNavigate();
   const { toast, confirm } = useFeedback();
-  const fileRef = useRef<HTMLInputElement>(null);
   const demoAccountId = useDemoAccountId();
   const [lastBackupAt, setLastBackupAt] = useState(getLastBackupAt);
+  const restore = useRestoreBackup(() => setLastBackupAt(getLastBackupAt()));
 
   const handleExport = async () => {
     await downloadBackup();
     setLastBackupAt(getLastBackupAt());
     toast('Бэкап сохранён');
-  };
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    try {
-      const json = await file.text();
-      JSON.parse(json);
-      const ok = await confirm({
-        title: 'Восстановить из бэкапа?',
-        description: 'Все текущие данные будут заменены данными из файла.',
-        confirmLabel: 'Восстановить',
-        destructive: true,
-      });
-      if (!ok) return;
-      await importAllData(json);
-      toast('Данные восстановлены');
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Ошибка: невалидный JSON файл', 'error');
-    }
   };
 
   const handleClear = async () => {
@@ -96,9 +75,9 @@ export function SettingsPage() {
             chevron
             onClick={handleExport}
           />
-          <ListRow leading={<RowIcon><Upload /></RowIcon>} title="Восстановить из бэкапа" subtitle="Заменит текущие данные" chevron onClick={() => fileRef.current?.click()} />
+          <ListRow leading={<RowIcon><Upload /></RowIcon>} title="Восстановить из бэкапа" subtitle="Заменит текущие данные" chevron onClick={restore.open} />
         </Card>
-        <input ref={fileRef} type="file" accept=".json,application/json" onChange={handleImport} className="hidden" />
+        <input {...restore.inputProps} />
       </Section>
 
       <PrivacyCard />

@@ -49,7 +49,9 @@ export function AssetDetailPage() {
     const calculated = calcAssetAnnualIncomePerUnit({ ...asset, paymentPerUnitSource: 'fact' }, spread, records, new Date());
     const annualIncome = asset.paymentPerUnitSource === 'manual' && asset.paymentPerUnit != null ? asset.paymentPerUnit : calculated.annualIncome;
     const totalQuantity = holdings.reduce((sum, h) => sum + h.quantity, 0);
-    const costBasis = holdings.reduce((sum, h) => sum + (h.averagePrice ?? 0) * h.quantity, 0);
+    const pricedHoldings = holdings.filter((h) => h.averagePrice != null && h.averagePrice > 0 && h.quantity > 0);
+    const costBasis = pricedHoldings.reduce((sum, h) => sum + h.averagePrice! * h.quantity, 0);
+    const costBasisQuantity = pricedHoldings.reduce((sum, h) => sum + h.quantity, 0);
     const next = projection.find((p) => p.assetId === assetId);
     return {
       spread,
@@ -57,6 +59,7 @@ export function AssetDetailPage() {
       annualIncome,
       totalQuantity,
       costBasis,
+      costBasisQuantity,
       next,
       stats: assetsById.get(assetId),
       chartHistory: history
@@ -73,7 +76,7 @@ export function AssetDetailPage() {
     );
   }
 
-  const { spread, calculated, annualIncome, totalQuantity, costBasis, next, stats } = computed;
+  const { spread, calculated, annualIncome, totalQuantity, costBasis, costBasisQuantity, next, stats } = computed;
   const isManual = asset.paymentPerUnitSource === 'manual';
   const currency = asset.currency ?? 'RUB';
   const exchange = isExchangeTraded(asset);
@@ -155,7 +158,7 @@ export function AssetDetailPage() {
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="text-[22px] font-semibold text-[var(--hi-text)]">{formatPrice(annualIncome / 12, currency)}</span>
                   <span className="text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)]">
-                    в месяц · {formatPrice(annualIncome, currency)} в год, до НДФЛ
+                    в месяц · {formatPrice(annualIncome, currency)} в год{perUnitLabel && ` ${perUnitLabel}`}, до НДФЛ
                   </span>
                 </div>
                 <div className="mt-1 text-[length:var(--hi-text-caption)] leading-snug text-[var(--hi-text-3)]">
@@ -263,7 +266,7 @@ export function AssetDetailPage() {
             <ListRow
               title="Куплено за"
               // Net of NDFL like «Доходность» above; both sides are in the asset's own currency.
-              subtitle={stats && valueKnown ? `Доход на вложенное: ${((annualIncome * totalQuantity * stats.taxMultiplier) / costBasis * 100).toFixed(1).replace('.', ',')}% годовых` : undefined}
+              subtitle={stats && valueKnown ? `Доход на вложенное: ${((annualIncome * costBasisQuantity * stats.taxMultiplier) / costBasis * 100).toFixed(1).replace('.', ',')}% годовых` : undefined}
               trailing={<span className="font-semibold text-[var(--hi-text)]">{formatMoney(costBasis, currency)}</span>}
             />
           )}

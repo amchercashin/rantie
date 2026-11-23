@@ -11,8 +11,8 @@
 /*
  * Рантье design tokens.
  * Warm "old money" palette: near-black paper, ivory type, brushed gold accents.
- * Text tiers are tuned for WCAG contrast on --hi-void:
- *   --hi-text ≈ 15:1, --hi-text-2 ≈ 8:1, --hi-text-3 ≈ 4.2:1.
+ * Text tiers are tuned for WCAG contrast on --hi-void / --hi-surface:
+ *   --hi-text ≈ 15:1, --hi-text-2 ≈ 8:1, --hi-text-3 ≈ 5.5:1 (≥ 5:1 on --hi-surface).
  */
 :root {
     /* Surfaces */
@@ -26,7 +26,7 @@
     /* Type */
     --hi-text: #efe7d8;
     --hi-text-2: #b3a894;
-    --hi-text-3: #7f7666;
+    --hi-text-3: #918775;
 
     /* Accents */
     --hi-gold: #d9c08e;

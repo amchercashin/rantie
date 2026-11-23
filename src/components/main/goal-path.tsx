@@ -72,7 +72,7 @@ export function GoalPath({ incomePerMonth, goalPerMonth, mode, animate = false, 
       <button
         type="button"
         onClick={onOpen}
-        className="hi-pressable flex w-full items-center justify-center gap-2 px-4 py-3 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)] active:bg-[var(--hi-raised)]"
+        className="hi-pressable flex w-full items-center justify-center gap-2 px-4 py-3 text-[length:var(--hi-text-caption)] text-[var(--hi-text-3)] hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)]"
       >
         <Target className="size-4 shrink-0 text-[var(--hi-gold)]" />
         <span className="font-semibold text-[var(--hi-gold)]">Поставить цель по доходу</span>
@@ -91,7 +91,7 @@ export function GoalPath({ incomePerMonth, goalPerMonth, mode, animate = false, 
       type="button"
       onClick={onOpen}
       aria-label={`Цель ${goalText}: пройдено ${progress.percent}%. Открыть цель и прогноз`}
-      className="hi-pressable block w-full px-4 pt-3.5 pb-4 text-center active:bg-[var(--hi-raised)]"
+      className="hi-pressable block w-full px-4 pt-3.5 pb-4 text-center hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)]"
     >
       <div className="hi-eyebrow inline-flex items-center justify-center gap-1.5">
         <span>Цель{NBSP}·{NBSP}{goalText}</span>

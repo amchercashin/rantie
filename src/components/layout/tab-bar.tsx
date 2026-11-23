@@ -50,7 +50,7 @@ export function TabBar() {
                 }
                 withViewTransition(() => navigate(tab.path), 'tab');
               }}
-              className="group relative flex flex-col items-center justify-center gap-1 outline-none"
+              className="group relative flex flex-col items-center justify-center gap-1 outline-none transition-colors hover:bg-[var(--hi-raised)]/60"
             >
               <span
                 className={cn(
@@ -62,13 +62,13 @@ export function TabBar() {
                 strokeWidth={active ? 2 : 1.6}
                 className={cn(
                   'size-[22px] transition-all duration-200 group-active:scale-90',
-                  active ? 'text-[var(--hi-gold)]' : 'text-[var(--hi-text-3)]',
+                  active ? 'text-[var(--hi-gold)]' : 'text-[var(--hi-text-3)] group-hover:text-[var(--hi-text-2)]',
                 )}
               />
               <span
                 className={cn(
                   'text-[10.5px] font-semibold tracking-[0.02em] transition-colors',
-                  active ? 'text-[var(--hi-gold)]' : 'text-[var(--hi-text-3)]',
+                  active ? 'text-[var(--hi-gold)]' : 'text-[var(--hi-text-3)] group-hover:text-[var(--hi-text-2)]',
                 )}
               >
                 {tab.label}

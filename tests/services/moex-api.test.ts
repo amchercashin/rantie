@@ -283,6 +283,26 @@ describe('fetchBondData', () => {
     });
   });
 
+  it('parses FACEUNIT and CURRENCYID (normalizing SUR/RUR to RUB)', async () => {
+    vi.stubGlobal('fetch', mockFetch({
+      securities: {
+        columns: ['SECID', 'PREVPRICE', 'FACEVALUE', 'ACCRUEDINT', 'COUPONVALUE', 'NEXTCOUPON', 'COUPONPERIOD', 'FACEUNIT', 'CURRENCYID'],
+        data: [['RU000A105A95', 98.5, 1000, 1450.5, 25.5, '2026-09-15', 182, 'USD', 'SUR']],
+      },
+      marketdata: {
+        columns: ['SECID', 'LAST', 'LCURRENTPRICE'],
+        data: [['RU000A105A95', 99.0, null]],
+      },
+    }));
+    const result = await fetchBondData('RU000A105A95', 'TQCB');
+    expect(result).toEqual({
+      currentPrice: 99.0, prevPrice: 98.5,
+      faceValue: 1000, accruedInterest: 1450.5, couponValue: 25.5,
+      nextCouponDate: '2026-09-15', couponPeriod: 182,
+      faceUnit: 'USD', currencyId: 'RUB',
+    });
+  });
+
   it('returns null on error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
     expect(await fetchBondData('SU26238RMFS4', 'TQOB')).toBeNull();
@@ -473,6 +493,19 @@ describe('couponRows', () => {
     expect(couponRows([row('2026-11-13', 40), row('2027-05-13', 40)], now)).toEqual([
       { date: new Date('2026-11-13'), amount: 40 },
       { date: new Date('2027-05-13'), amount: 40 },
+    ]);
+  });
+
+  it('uses value instead of value_rub for non-ruble bond coupons', () => {
+    const result = couponRows([
+      { coupondate: '2026-06-01', faceunit: 'USD', value: 25.5, value_rub: 2295 },
+      { coupondate: '2026-12-01', faceunit: 'USD', value: 25.5, value_rub: null },
+      { coupondate: '2026-08-01', faceunit: 'SUR', value: 40, value_rub: 40.2 },
+    ], now);
+    expect(result).toEqual([
+      { date: new Date('2026-06-01'), amount: 25.5 },
+      { date: new Date('2026-08-01'), amount: 40.2 },
+      { date: new Date('2026-12-01'), amount: 25.5 },
     ]);
   });
 });

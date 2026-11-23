@@ -60,7 +60,7 @@ export function ListRow({ leading, title, subtitle, trailing, chevron, onClick, 
   const classes = cn(
     'relative flex w-full items-center gap-3 px-4 py-3.5 text-left min-h-[56px]',
     'after:absolute after:bottom-0 after:left-4 after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden',
-    onClick && 'hi-pressable active:bg-[var(--hi-raised)]',
+    onClick && 'hi-pressable hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)]',
     className,
   );
   const content = (

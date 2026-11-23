@@ -10,9 +10,8 @@ import { applyImportPlan } from '@/services/import-applier';
 import type { ImportRecord } from '@/models/types';
 import { ImportPreview } from './import-preview';
 import { Landmark, Bot, ArrowLeft, Copy, Check, ShieldAlert } from 'lucide-react';
+import { useFeedback } from '@/components/ds/feedback';
 import { useSyncContext } from '@/contexts/sync-context';
-import { syncSingleAsset, isSyncable } from '@/services/moex-sync';
-import { db } from '@/db/database';
 import { enrichFromMoex } from '@/services/moex-enrich';
 
 interface ImportFlowProps {
@@ -102,6 +101,7 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
   const [enriching, setEnriching] = useState(false);
   const sberFileRef = useRef<HTMLInputElement>(null);
   const { triggerSync } = useSyncContext();
+  const { toast } = useFeedback();
 
   const reset = useCallback(() => {
     setStep('method');
@@ -192,19 +192,9 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
         diff: a.diff,
         accountName: a.accountId === null ? names[i]?.trim() || a.name : undefined,
       }));
-      const { newAssetIds } = await applyImportPlan(targets, importSource);
+      await applyImportPlan(targets, importSource);
       handleClose();
       triggerSync();
-
-      // Sync payments for newly created syncable assets (fire-and-forget)
-      (async () => {
-        for (const id of newAssetIds) {
-          const asset = await db.assets.get(id);
-          if (asset && isSyncable(asset)) {
-            try { await syncSingleAsset(id); } catch { /* ignore */ }
-          }
-        }
-      })();
     } catch {
       setError('Ошибка при применении импорта');
       setApplying(false);
@@ -212,9 +202,13 @@ export function ImportFlow({ open, onClose, accountId, accountName }: ImportFlow
   };
 
   const handleCopyPrompt = async () => {
-    await navigator.clipboard.writeText(AI_PROMPT);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(AI_PROMPT);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast('Не удалось скопировать промт', 'error');
+    }
   };
 
   const title = step === 'preview' ? 'Проверьте изменения' : accountId !== null ? `Импорт: ${accountName}` : 'Импорт отчёта';

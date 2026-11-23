@@ -14,8 +14,13 @@ export function useCountUp(target: number | null, animate = true, duration = 110
       setCurrent(null);
       return;
     }
+    if (currentRef.current === target) return;
     const from = currentRef.current ?? 0;
-    if (from === target) return;
+    if (from === target) {
+      currentRef.current = target;
+      setCurrent(target);
+      return;
+    }
 
     const reduced = typeof window.matchMedia === 'function'
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

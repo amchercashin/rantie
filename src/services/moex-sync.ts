@@ -311,10 +311,13 @@ function pricePatch(
   if (ra.market === 'bonds') {
     // MOEX quotes a bond in percent of its face value.
     const bond = data as BondDataResult;
+    const accruedInterestCurrency = bond.currencyId ?? bond.faceUnit;
     return {
       currentPrice: bond.faceValue * (price / 100),
       faceValue: bond.faceValue,
       accruedInterest: bond.accruedInterest,
+      ...(bond.faceUnit ? { currency: bond.faceUnit } : {}),
+      ...(accruedInterestCurrency ? { accruedInterestCurrency } : {}),
       updatedAt: now,
     };
   }
@@ -570,54 +573,54 @@ async function writePaymentHistory(
   type: PaymentHistory['type'],
   dataSource: DataSource = 'moex',
 ): Promise<void> {
-  const existing = await db.paymentHistory
-    .where('[assetId+date]')
-    .between([assetId, Dexie.minKey], [assetId, Dexie.maxKey])
-    .filter((r) => r.type === type && r.dataSource === dataSource)
-    .toArray();
-
-  // A date may carry several payments (two dividends with one record date), so rows are
-  // matched per date as a multiset, never keyed by the date alone.
-  const incoming = groupByDate(rows.map((row): Omit<PaymentHistory, 'id'> => ({
-    assetId,
-    amount: row.amount,
-    date: row.date,
-    type,
-    dataSource,
-    ...(row.isForecast ? { isForecast: true } : {}),
-    ...(row.isForecast && row.recommended ? { recommended: true } : {}),
-  })));
-  const stored = groupByDate(existing);
-
-  const toDelete: number[] = [];
-  const toUpdate: { key: number; changes: Partial<PaymentHistory> }[] = [];
-  const toAdd: Omit<PaymentHistory, 'id'>[] = [];
-  type Comparable = Pick<PaymentHistory, 'amount' | 'isForecast' | 'recommended'>;
-  const same = (a: Comparable, b: Comparable) =>
-    a.amount === b.amount &&
-    (a.isForecast === true) === (b.isForecast === true) &&
-    (a.recommended === true) === (b.recommended === true);
-
-  for (const [time, records] of stored) {
-    const next = incoming.get(time) ?? [];
-    // Unchanged rows keep their ids; the rest are paired up in order and updated in place.
-    const leftover = records.filter((record) => {
-      const i = next.findIndex((n) => same(n, record));
-      if (i < 0) return true;
-      next.splice(i, 1);
-      return false;
-    });
-    for (const record of leftover) {
-      const n = next.shift();
-      if (n) toUpdate.push({ key: record.id!, changes: { amount: n.amount, isForecast: n.isForecast, recommended: n.recommended } });
-      else toDelete.push(record.id!);
-    }
-    toAdd.push(...next);
-    incoming.delete(time);
-  }
-  for (const records of incoming.values()) toAdd.push(...records);
-
   await db.transaction('rw', db.paymentHistory, async () => {
+    const existing = await db.paymentHistory
+      .where('[assetId+date]')
+      .between([assetId, Dexie.minKey], [assetId, Dexie.maxKey])
+      .filter((r) => r.type === type && r.dataSource === dataSource)
+      .toArray();
+
+    // A date may carry several payments (two dividends with one record date), so rows are
+    // matched per date as a multiset, never keyed by the date alone.
+    const incoming = groupByDate(rows.map((row): Omit<PaymentHistory, 'id'> => ({
+      assetId,
+      amount: row.amount,
+      date: row.date,
+      type,
+      dataSource,
+      ...(row.isForecast ? { isForecast: true } : {}),
+      ...(row.isForecast && row.recommended ? { recommended: true } : {}),
+    })));
+    const stored = groupByDate(existing);
+
+    const toDelete: number[] = [];
+    const toUpdate: { key: number; changes: Partial<PaymentHistory> }[] = [];
+    const toAdd: Omit<PaymentHistory, 'id'>[] = [];
+    type Comparable = Pick<PaymentHistory, 'amount' | 'isForecast' | 'recommended'>;
+    const same = (a: Comparable, b: Comparable) =>
+      a.amount === b.amount &&
+      (a.isForecast === true) === (b.isForecast === true) &&
+      (a.recommended === true) === (b.recommended === true);
+
+    for (const [time, records] of stored) {
+      const next = incoming.get(time) ?? [];
+      // Unchanged rows keep their ids; the rest are paired up in order and updated in place.
+      const leftover = records.filter((record) => {
+        const i = next.findIndex((n) => same(n, record));
+        if (i < 0) return true;
+        next.splice(i, 1);
+        return false;
+      });
+      for (const record of leftover) {
+        const n = next.shift();
+        if (n) toUpdate.push({ key: record.id!, changes: { amount: n.amount, isForecast: n.isForecast, recommended: n.recommended } });
+        else toDelete.push(record.id!);
+      }
+      toAdd.push(...next);
+      incoming.delete(time);
+    }
+    for (const records of incoming.values()) toAdd.push(...records);
+
     if (toDelete.length > 0) await db.paymentHistory.bulkDelete(toDelete);
     if (toUpdate.length > 0) await db.paymentHistory.bulkUpdate(toUpdate);
     if (toAdd.length > 0) await db.paymentHistory.bulkAdd(toAdd);

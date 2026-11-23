@@ -8,8 +8,7 @@ import { updateAccount, deleteAccount } from '@/hooks/use-accounts';
 import { useExchangeRateMap } from '@/hooks/use-exchange-rates';
 import { useNdflRates } from '@/hooks/use-ndfl-rates';
 import { ndflAccountLabel } from '@/services/ndfl-rates';
-import { getRateToRub } from '@/services/exchange-rates';
-import { unitValue } from '@/models/asset-kind';
+import { unitValueOwn, unitValueRub } from '@/models/asset-kind';
 import { Card, AssetAvatar, CategoryDot } from '@/components/ds/surface';
 import { Badge } from '@/components/ds/badge';
 import { BottomSheet } from '@/components/ds/bottom-sheet';
@@ -65,9 +64,10 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
         const asset = assetById.get(holding.assetId);
         if (!asset) return null;
         // The same value as the capital on Доход: price + НКД; without a price it is unknown («—»).
-        const unit = unitValue(asset);
-        const valueOwn = unit == null ? null : unit * holding.quantity;
-        const valueRub = (valueOwn ?? 0) * getRateToRub(asset.currency, exchangeRates);
+        const unitOwn = unitValueOwn(asset, exchangeRates);
+        const unitRub = unitValueRub(asset, exchangeRates);
+        const valueOwn = unitOwn == null ? null : unitOwn * holding.quantity;
+        const valueRub = (unitRub ?? 0) * holding.quantity;
         return { asset, holding, valueOwn, valueRub };
       })
       .filter((r): r is NonNullable<typeof r> => r != null);
@@ -116,7 +116,7 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="hi-pressable flex min-w-0 flex-1 items-center gap-3 py-4 pl-4 pr-2 text-left active:bg-[var(--hi-raised)]"
+          className="hi-pressable flex min-w-0 flex-1 items-center gap-3 py-4 pl-4 pr-2 text-left hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)]"
         >
           <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--hi-line-strong)] bg-[var(--hi-raised)] text-[var(--hi-gold)]">
             <Wallet className="size-[18px]" />
@@ -137,7 +137,7 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
           type="button"
           onClick={() => setMenuOpen(true)}
           aria-label={`Действия со счётом ${account.name}`}
-          className="hi-pressable mr-2 inline-flex size-10 shrink-0 items-center justify-center rounded-full text-[var(--hi-text-2)] active:bg-[var(--hi-raised)]"
+          className="hi-pressable mr-2 inline-flex size-10 shrink-0 items-center justify-center rounded-full text-[var(--hi-text-2)] hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)]"
         >
           <MoreHorizontal className="size-5" />
         </button>
@@ -170,7 +170,7 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
                       type="button"
                       onClick={() => { setEditing({ asset, holding }); setEditOpen(true); }}
                       className={cn(
-                        'hi-pressable relative flex w-full items-center gap-3 px-4 py-3 text-left active:bg-[var(--hi-raised)]',
+                        'hi-pressable relative flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)]',
                         'after:absolute after:bottom-0 after:left-[68px] after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden',
                         highlighted && 'animate-highlight-pulse',
                       )}
@@ -201,14 +201,14 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
               <button
                 type="button"
                 onClick={() => setAddAssetOpen(true)}
-                className="hi-pressable inline-flex h-11 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[var(--hi-line-strong)] text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-text-2)] active:bg-[var(--hi-raised)]"
+                className="hi-pressable inline-flex h-11 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[var(--hi-line-strong)] text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-text-2)] hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)]"
               >
                 <Plus className="size-4" /> Добавить актив
               </button>
               <button
                 type="button"
                 onClick={onImport}
-                className="hi-pressable inline-flex h-11 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[var(--hi-line-strong)] text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-text-2)] active:bg-[var(--hi-raised)]"
+                className="hi-pressable inline-flex h-11 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[var(--hi-line-strong)] text-[length:var(--hi-text-caption)] font-semibold text-[var(--hi-text-2)] hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)]"
               >
                 <FileUp className="size-4" /> Импорт отчёта
               </button>
@@ -228,7 +228,7 @@ export function AccountSection({ account, holdings, assets, onImport, highlightA
               key={item.label}
               type="button"
               onClick={item.onClick}
-              className="hi-pressable relative flex w-full items-center gap-3 px-4 py-4 text-left text-[length:var(--hi-text-body)] text-[var(--hi-text)] active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-12 after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden [&_svg]:size-[18px] [&_svg]:text-[var(--hi-gold)]"
+              className="hi-pressable relative flex w-full items-center gap-3 px-4 py-4 text-left text-[length:var(--hi-text-body)] text-[var(--hi-text)] hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-12 after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden [&_svg]:size-[18px] [&_svg]:text-[var(--hi-gold)]"
             >
               {item.icon} {item.label}
             </button>

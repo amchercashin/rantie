@@ -30,4 +30,13 @@ describe('IncomeHero stats row', () => {
     expect(screen.getByText('Доходность')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /откуда доход/ })).toBeNull();
   });
+
+  it('shows 0 instead of a dash when income is 0 and animate is true', () => {
+    render(
+      <MemoryRouter>
+        <IncomeHero {...props} income={0} incomePerYear={0} animate />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('hero-amount')).toHaveTextContent(/^0$/);
+  });
 });

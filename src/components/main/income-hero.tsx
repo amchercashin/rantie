@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useCountUp } from '@/hooks/use-count-up';
 import { TransitionLink } from '@/components/ui/transition-link';
+import { RubleSign } from '@/components/ds/brand-mark';
 import { Segmented } from '@/components/ds/segmented';
 import { NBSP, cn, formatCurrency, formatCurrencyFull, formatPercent } from '@/lib/utils';
 
@@ -88,7 +89,7 @@ export function IncomeHero({ income, incomePerYear, yieldPercent, totalValue, mo
         >
           {digits}
         </span>
-        <span className="text-[length:var(--hi-text-large)] font-light leading-none text-[var(--hi-gold-deep)]">₽</span>
+        <RubleSign className="text-[length:var(--hi-text-large)] text-[var(--hi-gold-deep)]" />
       </div>
 
       <div
@@ -121,7 +122,7 @@ export function IncomeHero({ income, incomePerYear, yieldPercent, totalValue, mo
             type="button"
             onClick={onStatsClick}
             aria-label={`Доходность ${formatPercent(yieldPercent)}, капитал ${formatCurrency(totalValue)}. Показать, откуда доход`}
-            className={cn(statsGrid, 'hi-pressable w-full outline-none active:bg-[var(--hi-raised)] focus-visible:bg-[var(--hi-raised)]')}
+            className={cn(statsGrid, 'hi-pressable w-full outline-none hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)] focus-visible:bg-[var(--hi-raised)]')}
           >
             {stats}
           </button>

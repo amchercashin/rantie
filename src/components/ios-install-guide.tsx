@@ -1,4 +1,7 @@
 import { useState, useCallback } from 'react';
+import { BottomSheet } from '@/components/ds/bottom-sheet';
+import { Button } from '@/components/ds/button';
+import { cn } from '@/lib/utils';
 
 interface IosInstallGuideProps {
   onClose: () => void;
@@ -62,61 +65,67 @@ export function IosInstallGuide({ onClose }: IosInstallGuideProps) {
   }, [step, onClose]);
 
   const current = STEPS[step];
+  const isLast = step >= TOTAL_STEPS - 1;
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-[9000] bg-black/60 animate-[hi-fade-in_0.2s_ease-out_both]"
-        onClick={onClose}
-      />
-
-      {/* Bottom sheet */}
-      <div
-        className="fixed left-0 right-0 bottom-0 z-[9001] bg-[var(--hi-raised)] rounded-t-2xl animate-[hi-fade-slide-up_0.3s_ease-out_both]"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}
-        onClick={advance}
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-4">
-          <div className="w-9 h-1 rounded-full bg-[var(--hi-line-strong)]" />
+    <BottomSheet
+      open
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      title="На экран «Домой»"
+      description={`Шаг ${step + 1} из ${TOTAL_STEPS}: ${current.caption}`}
+      footer={
+        <div className="flex gap-2">
+          {step > 0 && (
+            <Button variant="secondary" size="lg" onClick={() => setStep((s) => s - 1)} className="flex-1">
+              Назад
+            </Button>
+          )}
+          <Button variant="primary" size="lg" onClick={advance} className={step > 0 ? 'flex-[2]' : 'w-full'}>
+            {isLast ? 'Готово' : 'Далее'}
+          </Button>
         </div>
-
-        {/* Step indicator */}
-        <div className="text-center mb-4">
-          <span className="text-[length:var(--hi-text-micro)] font-semibold text-[var(--hi-text-2)]">
-            {step + 1} / {TOTAL_STEPS}
+      }
+    >
+      <div className="space-y-4">
+        <div
+          onClick={advance}
+          className="relative cursor-pointer overflow-hidden rounded-2xl border border-[var(--hi-line)]"
+        >
+          <img
+            src={current.src}
+            alt={current.alt}
+            className="block h-auto w-full"
+          />
+          <span
+            aria-hidden="true"
+            className="animate-[a2hs-tap_2s_ease-in-out_infinite]"
+            style={{ ...fingerStyle, ...current.finger }}
+          >
+            👆
           </span>
         </div>
 
-        {/* Screenshot with finger overlay */}
-        <div className="px-4 mb-4">
-          <div className="relative rounded-xl overflow-hidden border border-[rgba(200,180,140,0.08)]">
-            <img
-              src={current.src}
-              alt={current.alt}
-              className="w-full h-auto block"
-            />
-            {/* Animated finger */}
-            <span
-              className="animate-[a2hs-tap_2s_ease-in-out_infinite]"
-              style={{ ...fingerStyle, ...current.finger }}
-            >
-              👆
-            </span>
-          </div>
+        <div className="text-center text-[length:var(--hi-text-body)] font-medium text-[var(--hi-gold)]">
+          {current.caption}
         </div>
 
-        {/* Caption */}
-        <div className="text-center px-4">
-          <div className="text-[length:var(--hi-text-body)] text-[var(--hi-gold)] font-medium">
-            {current.caption}
-          </div>
-          <div className="text-[length:var(--hi-text-micro)] text-[var(--hi-text-2)] mt-2">
-            Нажмите, чтобы продолжить
-          </div>
+        <div className="flex justify-center gap-2 pb-1" role="tablist" aria-label="Шаги установки">
+          {STEPS.map((s, i) => (
+            <button
+              key={s.src}
+              type="button"
+              role="tab"
+              aria-selected={i === step}
+              aria-label={`Шаг ${i + 1}`}
+              onClick={() => setStep(i)}
+              className={cn(
+                'h-1.5 rounded-full transition-all duration-300',
+                i === step ? 'w-6 bg-[var(--hi-gold)]' : 'w-1.5 bg-[var(--hi-line-strong)]',
+              )}
+            />
+          ))}
         </div>
       </div>
-    </>
+    </BottomSheet>
   );
 }

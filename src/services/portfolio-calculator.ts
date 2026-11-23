@@ -7,7 +7,7 @@ import {
   type PaymentRecord,
 } from './income-calculator';
 import { getRateToRub, normalizeCurrency } from './exchange-rates';
-import { incomeSpreadOf, unitValue } from '@/models/asset-kind';
+import { incomeSpreadOf, unitValueRub } from '@/models/asset-kind';
 
 export interface CalculatedAssetStats extends AssetStats {
   assetId: number;
@@ -112,7 +112,7 @@ export function calculatePortfolioSnapshot(input: PortfolioCalculationInput): Po
     const rateToRub = getRateToRub(currency, input.exchangeRates);
     const rateMissing = rateToRub <= 0;
     if (rateMissing && totalQuantity > 0) missingRates.add(normalizeCurrency(currency));
-    const value = (unitValue(asset) ?? 0) * totalQuantity * rateToRub;
+    const value = (unitValueRub(asset, input.exchangeRates) ?? 0) * totalQuantity;
 
     const annualIncomePerUnit = calcAssetAnnualIncomePerUnit(
       asset,

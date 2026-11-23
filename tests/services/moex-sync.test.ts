@@ -39,6 +39,7 @@ vi.mock('@/services/moex-api', async (importOriginal) => ({
 import {
   resolveSecurityInfo,
   fetchDividends,
+  fetchCouponHistory,
   fetchBatchStockPrices,
   fetchBatchBondData,
   fetchIndicativeRates,
@@ -48,7 +49,7 @@ import {
   isDohodIndexLoaded, isFundIndexLoaded,
   isSmartlabAvailable, fetchSmartlabDividends, isSmartlabIndexLoaded,
 } from '@/services/heroincome-data';
-import { syncAllAssets, syncAssetPayments } from '@/services/moex-sync';
+import { syncAllAssets, syncAssetPayments, syncSingleAsset } from '@/services/moex-sync';
 import { getLastSyncAt, getLastPriceSyncAt } from '@/services/sync-state';
 
 const ASSET_DEFAULTS = {
@@ -1434,5 +1435,99 @@ describe('smart-lab after dohod.ru', () => {
 
     expect(result.outcome).toBe('no-source');
     expect(await rowsOf(assetId)).toEqual([{ date: '2026-06-01', amount: 5, src: 'manual' }]);
+  });
+});
+
+describe('bond currencies and concurrent sync safety', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await db.delete();
+    await db.open();
+    (isDohodAvailable as Mock).mockResolvedValue(false);
+    (isSmartlabAvailable as Mock).mockResolvedValue(false);
+    (fetchDohodDividends as Mock).mockResolvedValue(null);
+    (fetchSmartlabDividends as Mock).mockResolvedValue(null);
+  });
+
+  it('persists currency and accruedInterestCurrency when syncing a replacement bond', async () => {
+    const assetId = (await db.assets.add({
+      type: 'Облигации',
+      ticker: 'RU000A105A95',
+      moexSecid: 'RU000A105A95',
+      moexBoardId: 'TQCB',
+      moexMarket: 'bonds',
+      name: 'Газпром ЗО',
+      currency: 'RUB',
+      dataSource: 'manual',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...ASSET_DEFAULTS,
+    })) as number;
+
+    (fetchBatchBondData as Mock).mockResolvedValue(
+      new Map([['RU000A105A95', {
+        currentPrice: 99,
+        prevPrice: 98.5,
+        faceValue: 1000,
+        accruedInterest: 1450.5,
+        couponValue: 25.5,
+        nextCouponDate: '2026-09-15',
+        couponPeriod: 182,
+        faceUnit: 'USD',
+        currencyId: 'RUB',
+      }]]),
+    );
+    (fetchCouponHistory as Mock).mockResolvedValue([
+      { date: new Date('2026-03-15'), amount: 25.5 },
+    ]);
+
+    const result = await syncAllAssets();
+    expect(result.synced).toBe(1);
+
+    const updated = await db.assets.get(assetId);
+    expect(updated?.currency).toBe('USD');
+    expect(updated?.accruedInterestCurrency).toBe('RUB');
+    expect(updated?.currentPrice).toBeCloseTo(990);
+    expect(updated?.accruedInterest).toBeCloseTo(1450.5);
+  });
+
+  it('concurrent syncAllAssets and syncSingleAsset do not duplicate paymentHistory', async () => {
+    const assetId = (await db.assets.add({
+      type: 'Акции',
+      ticker: 'SBER',
+      moexSecid: 'SBER',
+      moexBoardId: 'TQBR',
+      moexMarket: 'shares',
+      name: 'Сбербанк',
+      dataSource: 'manual',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...ASSET_DEFAULTS,
+    })) as number;
+
+    (fetchBatchStockPrices as Mock).mockResolvedValue(
+      new Map([['SBER', { currentPrice: 320, prevPrice: 318 }]]),
+    );
+    (fetchDividends as Mock).mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 15));
+      return {
+        summary: {
+          lastPaymentAmount: 34.84,
+          lastPaymentDate: new Date('2025-07-18'),
+          frequencyPerYear: 1,
+          nextExpectedCutoffDate: null,
+        },
+        history: [
+          { date: new Date('2024-07-11'), amount: 33.3 },
+          { date: new Date('2025-07-18'), amount: 34.84 },
+        ],
+      };
+    });
+
+    await Promise.all([syncAllAssets(), syncSingleAsset(assetId)]);
+
+    const rows = await db.paymentHistory.where('assetId').equals(assetId).toArray();
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.amount).sort((a, b) => a - b)).toEqual([33.3, 34.84]);
   });
 });

@@ -40,7 +40,7 @@ export function UpcomingPayments({ payments, assetsById, now = new Date() }: Upc
           <TransitionLink
             key={`${p.assetId}-${p.date.getTime()}-${i}`}
             to={`/asset/${p.assetId}`}
-            className="hi-pressable relative flex items-center gap-3.5 px-4 py-3 active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-[68px] after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden"
+            className="hi-pressable relative flex items-center gap-3.5 px-4 py-3 hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-[68px] after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden"
           >
             <div
               className={cn(

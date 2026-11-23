@@ -69,6 +69,29 @@ export function RubleP({ className }: { className?: string }) {
 }
 
 /**
+ * Cormorant ruble sign on the same monogram contour, filled with `currentColor`
+ * so it inherits the surrounding tone (e.g. muted gold beside a hero Cormorant figure).
+ */
+export function RubleSign({ className }: { className?: string }) {
+  return (
+    <span className={cn('inline-flex items-baseline leading-none', className)}>
+      <span className="sr-only">₽</span>
+      <svg
+        viewBox="0 -640 535 640"
+        aria-hidden="true"
+        className="shrink-0 overflow-visible"
+        style={{ height: '0.72em', width: '0.602em' }}
+      >
+        <g fill="currentColor" stroke="currentColor" strokeWidth="6" strokeLinejoin="round">
+          <path d={GLYPH} />
+          <rect x="28" y="-196" width="300" height="20" rx="4" />
+        </g>
+      </svg>
+    </span>
+  );
+}
+
+/**
  * «Рантье» with the first letter drawn as the gold ruble «Р». `inherit` keeps the surrounding
  * font (headings); by default it is the compact header size. Screen readers get the plain word.
  */

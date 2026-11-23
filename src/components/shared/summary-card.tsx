@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Card, Stat } from '@/components/ds/surface';
 import { NetOfTaxBadge } from '@/components/ds/badge';
-import { formatCurrency, formatCurrencyFull, formatPercent } from '@/lib/utils';
+import { formatCurrency, formatCurrencyFull, formatIncome, formatPercent } from '@/lib/utils';
 
 interface SummaryCardProps {
   incomePerMonth: number | null;
@@ -29,7 +29,7 @@ export function SummaryCard({ incomePerMonth, totalValue, yieldPercent, portfoli
         {formatCurrencyFull(incomePerMonth)}
       </div>
       <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-[var(--hi-line)] pt-4">
-        <Stat label="В год" value={formatCurrency(incomePerMonth != null ? incomePerMonth * 12 : null)} />
+        <Stat label="В год" value={formatIncome(incomePerMonth != null ? incomePerMonth * 12 : null)} />
         <Stat label="Доходность" value={formatPercent(yieldPercent)} accent />
         <Stat label="Стоимость" value={formatCurrency(totalValue)} />
         <Stat label="Доля портфеля" value={formatPercent(portfolioSharePercent)} />

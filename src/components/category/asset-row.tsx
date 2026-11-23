@@ -28,7 +28,7 @@ export function AssetRow({ asset, stats }: AssetRowProps) {
   return (
     <TransitionLink
       to={`/asset/${asset.id}`}
-      className="hi-pressable relative flex items-center gap-3 px-4 py-3.5 active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-[68px] after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden"
+      className="hi-pressable relative flex items-center gap-3 px-4 py-3.5 hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-[68px] after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden"
     >
       <AssetAvatar label={asset.ticker ?? asset.name} color={color} />
       <div className="min-w-0 flex-1">

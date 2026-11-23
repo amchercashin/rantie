@@ -15,16 +15,23 @@ interface AddPaymentFormProps {
 const INPUT =
   'h-11 min-w-0 w-full rounded-xl border border-[var(--hi-line)] bg-[var(--hi-surface)] px-3 text-base text-[var(--hi-text)] outline-none placeholder:text-[var(--hi-text-3)] focus:border-[var(--hi-gold-deep)]';
 
+function todayLocalIso(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /** Inline form: date + amount per unit (before tax). */
 export function AddPaymentForm({ assetId, paymentType, currency, onAdd, onCancel }: AddPaymentFormProps) {
-  const [dateStr, setDateStr] = useState(new Date().toISOString().slice(0, 10));
+  const [dateStr, setDateStr] = useState(() => todayLocalIso());
   const [amountStr, setAmountStr] = useState('');
   const amount = parseDecimal(amountStr);
   const valid = Number.isFinite(amount) && amount > 0 && !!dateStr;
 
   const handleSubmit = () => {
     if (!valid) return;
-    onAdd({ assetId, amount, date: new Date(`${dateStr}T12:00:00`), type: paymentType, dataSource: 'manual' });
+    onAdd({ assetId, amount, date: new Date(`${dateStr}T00:00:00`), type: paymentType, dataSource: 'manual' });
     setAmountStr('');
   };
 

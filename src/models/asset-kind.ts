@@ -1,4 +1,5 @@
 import type { Asset } from './types';
+import { getRateToRub, normalizeCurrency } from '@/services/exchange-rates';
 
 /** Types whose payment history comes from the exchange (MOEX / dohod.ru / Parus). */
 export const EXCHANGE_TYPES = ['Акции', 'Облигации', 'Фонды'] as const;
@@ -37,4 +38,37 @@ export function incomeSpreadOf(asset: Pick<Asset, 'type' | 'ticker' | 'isin' | '
 export function unitValue(asset: Pick<Asset, 'type' | 'currentPrice' | 'accruedInterest'>): number | null {
   if (asset.currentPrice == null) return null;
   return asset.currentPrice + (asset.type === 'Облигации' ? asset.accruedInterest ?? 0 : 0);
+}
+
+type PricedAsset = Pick<Asset, 'type' | 'currentPrice' | 'accruedInterest' | 'currency' | 'accruedInterestCurrency'>;
+
+/**
+ * Value of one unit in rubles. Converts the price by `asset.currency`, and a bond's НКД by
+ * `asset.accruedInterestCurrency ?? asset.currency` (replacement bonds have a USD/EUR face value
+ * while MOEX quotes НКД in rubles). Null without a price; 0 when the asset's currency has no rate.
+ */
+export function unitValueRub(asset: PricedAsset, exchangeRates: Map<string, number>): number | null {
+  if (asset.currentPrice == null) return null;
+  const priceRate = getRateToRub(asset.currency, exchangeRates);
+  if (priceRate <= 0) return 0;
+  const priceRub = asset.currentPrice * priceRate;
+  if (asset.type !== 'Облигации' || !asset.accruedInterest) return priceRub;
+  const nkdRate = getRateToRub(asset.accruedInterestCurrency ?? asset.currency, exchangeRates);
+  return priceRub + asset.accruedInterest * nkdRate;
+}
+
+/**
+ * Value of one unit in the asset's own currency. When a bond's НКД is quoted in another currency
+ * (e.g. RUB for a USD replacement bond), НКД is converted into `asset.currency` using the rates.
+ */
+export function unitValueOwn(asset: PricedAsset, exchangeRates: Map<string, number>): number | null {
+  if (asset.currentPrice == null) return null;
+  if (asset.type !== 'Облигации' || !asset.accruedInterest) return asset.currentPrice;
+  const assetCur = normalizeCurrency(asset.currency);
+  const nkdCur = normalizeCurrency(asset.accruedInterestCurrency ?? asset.currency);
+  if (assetCur === nkdCur) return asset.currentPrice + asset.accruedInterest;
+  const priceRate = getRateToRub(assetCur, exchangeRates);
+  const nkdRate = getRateToRub(nkdCur, exchangeRates);
+  if (priceRate <= 0 || nkdRate <= 0) return asset.currentPrice;
+  return asset.currentPrice + asset.accruedInterest * (nkdRate / priceRate);
 }

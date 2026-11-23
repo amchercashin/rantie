@@ -1,9 +1,9 @@
-import { useMemo, useState, type PointerEvent } from 'react';
+import { useId, useMemo, useState, type PointerEvent } from 'react';
 import { useElementWidth } from '@/hooks/use-element-width';
 import type { TimelinePoint } from '@/services/income-projection';
 import { Card } from '@/components/ds/surface';
 import { Badge } from '@/components/ds/badge';
-import { cn, formatCurrency, formatCurrencyFull, formatPercent } from '@/lib/utils';
+import { cn, formatCompact, formatCurrency, formatCurrencyFull, formatPercent } from '@/lib/utils';
 
 interface IncomeDynamicsChartProps {
   points: TimelinePoint[];
@@ -32,19 +32,24 @@ function linePath(coords: [number, number][]): string {
  * (solid) and the next twelve months of forecast (dashed). Scrub to inspect.
  */
 export function IncomeDynamicsChart({ points, mode, animate = true }: IncomeDynamicsChartProps) {
+  const uid = useId().replace(/:/g, '');
+  const areaId = `hi-dyn-area-${uid}`;
+  const futureId = `hi-dyn-future-${uid}`;
   const { ref, width } = useElementWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
   const k = mode === 'year' ? 12 : 1;
 
-  const nowIndex = points.findIndex((p, i) => !p.future && (points[i + 1]?.future ?? true));
-  const firstNonZero = points.findIndex((p) => p.value > 0);
-  // Skip leading empty history so the line starts where income starts (keep ≥ 6 months).
-  const start = Math.max(0, Math.min(firstNonZero === -1 ? 0 : firstNonZero - 1, nowIndex - 6));
-  const visible = points.slice(start);
-  const nowVisible = nowIndex - start;
+  const { visible, nowVisible } = useMemo(() => {
+    const nowIndex = points.findIndex((p, i) => !p.future && (points[i + 1]?.future ?? true));
+    const firstNonZero = points.findIndex((p) => p.value > 0);
+    // Skip leading empty history so the line starts where income starts (keep ≥ 6 months).
+    const start = Math.max(0, Math.min(firstNonZero === -1 ? 0 : firstNonZero - 1, nowIndex - 6));
+    return { visible: points.slice(start), nowVisible: nowIndex - start };
+  }, [points]);
 
   const geometry = useMemo(() => {
-    const max = Math.max(...visible.map((p) => p.value * k), 1) * 1.12;
+    const peakValue = Math.max(...visible.map((p) => p.value * k), 0);
+    const max = Math.max(peakValue, 1) * 1.12;
     const innerW = Math.max(width - PAD_X * 2, 10);
     const innerH = HEIGHT - PAD_TOP - PAD_BOTTOM;
     const x = (i: number) => PAD_X + (visible.length > 1 ? (i / (visible.length - 1)) * innerW : innerW / 2);
@@ -53,6 +58,7 @@ export function IncomeDynamicsChart({ points, mode, animate = true }: IncomeDyna
     const past = coords.slice(0, nowVisible + 1);
     const future = coords.slice(nowVisible);
     const baseline = PAD_TOP + innerH;
+    const peakY = peakValue > 0 ? PAD_TOP + innerH - (peakValue / max) * innerH : PAD_TOP;
     const area = (c: [number, number][]) =>
       c.length ? `${linePath(c)}L${c[c.length - 1][0].toFixed(1)},${baseline}L${c[0][0].toFixed(1)},${baseline}Z` : '';
     const nowX = x(nowVisible);
@@ -60,7 +66,7 @@ export function IncomeDynamicsChart({ points, mode, animate = true }: IncomeDyna
       .map((p, i) => ({ i, date: p.date }))
       // January ticks, skipping edges and any that would collide with the "сейчас" label.
       .filter(({ date, i }) => date.getMonth() === 0 && i > 1 && i < visible.length - 2 && Math.abs(x(i) - nowX) > 44);
-    return { x, coords, past, future, pastArea: area(past), futureArea: area(future), baseline, years };
+    return { x, coords, past, future, pastArea: area(past), futureArea: area(future), baseline, peakValue, peakY, years };
   }, [visible, width, k, nowVisible]);
 
   if (visible.length < 2 || visible.every((p) => p.value === 0)) return null;
@@ -110,23 +116,45 @@ export function IncomeDynamicsChart({ points, mode, animate = true }: IncomeDyna
           className="block touch-pan-y select-none"
           onPointerMove={handlePointer}
           onPointerDown={handlePointer}
+          onPointerUp={() => setActive(null)}
+          onPointerCancel={() => setActive(null)}
           onPointerLeave={() => setActive(null)}
           role="img"
           aria-label="График месячного дохода: история и прогноз"
         >
           <defs>
-            <linearGradient id="hi-dyn-area" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor="var(--hi-gold)" stopOpacity="0.28" />
               <stop offset="1" stopColor="var(--hi-gold)" stopOpacity="0" />
             </linearGradient>
-            <linearGradient id="hi-dyn-future" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={futureId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor="var(--hi-gold)" stopOpacity="0.10" />
               <stop offset="1" stopColor="var(--hi-gold)" stopOpacity="0" />
             </linearGradient>
           </defs>
 
-          {/* baseline + year ticks */}
+          {/* baseline, peak reference + year ticks */}
           <line x1={PAD_X} x2={width - PAD_X} y1={geometry.baseline} y2={geometry.baseline} stroke="var(--hi-line-strong)" />
+          {geometry.peakValue > 0 && (
+            <g>
+              <line
+                x1={PAD_X}
+                x2={width - PAD_X}
+                y1={geometry.peakY}
+                y2={geometry.peakY}
+                stroke="var(--hi-line)"
+                strokeDasharray="2 4"
+              />
+              <text
+                x={width - PAD_X}
+                y={geometry.peakY - 4}
+                textAnchor="end"
+                className="fill-[var(--hi-text-3)] text-[10px] font-medium"
+              >
+                {formatCompact(geometry.peakValue)} ₽
+              </text>
+            </g>
+          )}
           {geometry.years.map(({ i, date }) => (
             <g key={i}>
               <line x1={geometry.x(i)} x2={geometry.x(i)} y1={PAD_TOP} y2={geometry.baseline} stroke="var(--hi-line)" strokeDasharray="2 4" />
@@ -136,10 +164,10 @@ export function IncomeDynamicsChart({ points, mode, animate = true }: IncomeDyna
             </g>
           ))}
 
-          <path d={geometry.futureArea} fill="url(#hi-dyn-future)" />
+          <path d={geometry.futureArea} fill={`url(#${futureId})`} />
           <path
             d={geometry.pastArea}
-            fill="url(#hi-dyn-area)"
+            fill={`url(#${areaId})`}
             style={animate ? { animation: 'hi-fade-in 1s ease-out 0.5s both' } : undefined}
           />
           <path
@@ -149,8 +177,8 @@ export function IncomeDynamicsChart({ points, mode, animate = true }: IncomeDyna
             strokeWidth="2"
             strokeLinejoin="round"
             strokeLinecap="round"
-            pathLength={1}
-            strokeDasharray="1"
+            pathLength={animate ? 1 : undefined}
+            strokeDasharray={animate ? '1' : undefined}
             style={animate ? { strokeDashoffset: 1, animation: 'hi-draw 1.3s var(--hi-ease-out) 0.3s forwards' } : undefined}
           />
           <path

@@ -4,7 +4,7 @@ import { getTypeColor } from '@/models/account';
 import type { MonthBucket } from '@/services/income-projection';
 import { Card } from '@/components/ds/surface';
 import { TransitionLink } from '@/components/ui/transition-link';
-import { cn, formatCompact, formatCurrency, formatCurrencyFull } from '@/lib/utils';
+import { cn, formatCurrency, formatCurrencyFull } from '@/lib/utils';
 import { basisLabel } from '@/lib/payment-basis';
 
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -42,6 +42,16 @@ export function CashFlowCalendar({ buckets, assetsById }: CashFlowCalendarProps)
     [buckets, assetsById],
   );
 
+  const legendTypes = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const monthStack of stacks) {
+      for (const [type, amount] of monthStack) {
+        totals.set(type, (totals.get(type) ?? 0) + amount);
+      }
+    }
+    return [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([type]) => type);
+  }, [stacks]);
+
   const bucket = buckets[Math.min(selected, buckets.length - 1)];
   const rows = [...bucket.payments].sort((a, b) => a.date.getTime() - b.date.getTime());
 
@@ -78,13 +88,17 @@ export function CashFlowCalendar({ buckets, assetsById }: CashFlowCalendarProps)
                 onClick={() => setSelected(i)}
                 className="group flex h-full flex-col items-center justify-end outline-none"
               >
-                <span className={cn('mb-1 text-[9.5px] font-bold transition-opacity', active ? 'text-[var(--hi-gold)] opacity-100' : 'opacity-0')}>
-                  {b.total > 0 ? formatCompact(b.total) : ''}
-                </span>
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'mb-1.5 size-1.5 shrink-0 rounded-full bg-[var(--hi-gold)] transition-all duration-300',
+                    active ? 'scale-100 opacity-100 shadow-[0_0_8px_var(--hi-gold-glow)]' : 'scale-50 opacity-0',
+                  )}
+                />
                 <div
                   className={cn(
                     'flex w-full flex-col-reverse overflow-hidden rounded-[5px] transition-all duration-300',
-                    active ? 'opacity-100' : 'opacity-55 group-active:opacity-80',
+                    active ? 'opacity-100' : 'opacity-55 group-hover:opacity-80 group-active:opacity-80',
                   )}
                   style={{ height: h, animation: `hi-bar-grow 0.7s var(--hi-ease-out) ${0.05 * i}s both`, transformOrigin: 'bottom' }}
                 >
@@ -98,8 +112,8 @@ export function CashFlowCalendar({ buckets, assetsById }: CashFlowCalendarProps)
                 </div>
                 <span
                   className={cn(
-                    'mt-1.5 whitespace-nowrap text-[10px] font-semibold',
-                    active ? 'text-[var(--hi-gold)]' : 'text-[var(--hi-text-3)]',
+                    'mt-1.5 whitespace-nowrap text-[10px] font-semibold transition-colors',
+                    active ? 'text-[var(--hi-gold)]' : 'text-[var(--hi-text-3)] group-hover:text-[var(--hi-text-2)]',
                     // Narrow phones: label every other month (the selected one always).
                     !active && i % 2 === 1 && buckets.length > 12 && 'max-[400px]:invisible',
                   )}
@@ -110,6 +124,17 @@ export function CashFlowCalendar({ buckets, assetsById }: CashFlowCalendarProps)
             );
           })}
         </div>
+
+        {legendTypes.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 border-t border-[var(--hi-line)] pt-2.5 text-[length:var(--hi-text-micro)] text-[var(--hi-text-3)]">
+            {legendTypes.map((type) => (
+              <span key={type} className="inline-flex items-center gap-1.5">
+                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: getTypeColor(type) }} />
+                {type}
+              </span>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card className="overflow-hidden">
@@ -129,7 +154,7 @@ export function CashFlowCalendar({ buckets, assetsById }: CashFlowCalendarProps)
             <TransitionLink
               key={`${p.assetId}-${i}`}
               to={`/asset/${p.assetId}`}
-              className="hi-pressable relative flex items-center gap-3 px-4 py-3 active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-4 after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden"
+              className="hi-pressable relative flex items-center gap-3 px-4 py-3 hover:bg-[var(--hi-raised)]/60 active:bg-[var(--hi-raised)] after:absolute after:bottom-0 after:left-4 after:right-0 after:h-px after:bg-[var(--hi-line)] last:after:hidden"
             >
               <span className="w-7 shrink-0 text-center text-[15px] font-bold text-[var(--hi-text)]">
                 {p.estimated ? '—' : p.date.getDate()}

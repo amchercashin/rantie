@@ -10,7 +10,6 @@ import { Hint } from '@/components/ds/hint';
 import { SyncGlyph } from '@/components/ds/sync-glyph';
 import { TransitionLink } from '@/components/ui/transition-link';
 import { guidePath } from '@/lib/guide';
-import { useAllPaymentHistory } from '@/hooks/use-payment-history';
 import { usePortfolioStats } from '@/hooks/use-portfolio-stats';
 import { bucketByMonth } from '@/services/income-projection';
 import type { Asset, PaymentHistory } from '@/models/types';
@@ -18,8 +17,7 @@ import type { Asset, PaymentHistory } from '@/models/types';
 type View = 'calendar' | 'history';
 
 export function PaymentsPage() {
-  const { portfolio, assets, projection, isLoading } = usePortfolioStats();
-  const allPayments = useAllPaymentHistory();
+  const { portfolio, assets, paymentHistory: allPayments, projection, isLoading } = usePortfolioStats();
   const taxed = portfolio.taxed;
   const location = useLocation();
   const [highlightAssetId] = useState(() => (location.state as { highlightAssetId?: number } | null)?.highlightAssetId);

@@ -33,6 +33,8 @@ export interface Asset {
   currentPrice?: number;
   faceValue?: number;
   accruedInterest?: number;
+  /** Currency of accruedInterest when it differs from the bond's face currency (e.g. USD replacement bond with RUB NKD). */
+  accruedInterestCurrency?: string;
 
   // payment per unit with source tracking
   paymentPerUnit?: number;

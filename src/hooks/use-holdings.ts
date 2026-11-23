@@ -8,7 +8,7 @@ export function useHoldings() {
 
 export function useHoldingsByAsset(assetId: number) {
   return useLiveQuery(
-    () => db.holdings.where('assetId').equals(assetId).toArray(),
+    () => (Number.isFinite(assetId) ? db.holdings.where('assetId').equals(assetId).toArray() : []),
     [assetId],
   ) ?? [];
 }

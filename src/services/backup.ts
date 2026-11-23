@@ -20,17 +20,21 @@ interface BackupPayload {
 }
 
 export async function exportAllData(): Promise<string> {
-  const data = {
-    version: 4,
-    exportedAt: new Date().toISOString(),
-    accounts: await db.accounts.toArray(),
-    assets: await db.assets.toArray(),
-    holdings: await db.holdings.toArray(),
-    paymentHistory: await db.paymentHistory.toArray(),
-    importRecords: await db.importRecords.toArray(),
-    settings: await db.settings.toArray(),
-    exchangeRates: await db.exchangeRates.toArray(),
-  };
+  const data = await db.transaction(
+    'r',
+    [db.accounts, db.assets, db.holdings, db.paymentHistory, db.importRecords, db.exchangeRates, db.settings],
+    async () => ({
+      version: 4,
+      exportedAt: new Date().toISOString(),
+      accounts: await db.accounts.toArray(),
+      assets: await db.assets.toArray(),
+      holdings: await db.holdings.toArray(),
+      paymentHistory: await db.paymentHistory.toArray(),
+      importRecords: await db.importRecords.toArray(),
+      settings: await db.settings.toArray(),
+      exchangeRates: await db.exchangeRates.toArray(),
+    }),
+  );
   return JSON.stringify(data, null, 2);
 }
 
@@ -168,6 +172,10 @@ function parseAsset(value: unknown, index: number): Asset {
     frequencyPerYear: parseNumber(row.frequencyPerYear, `assets[${index}].frequencyPerYear`),
     createdAt: parseDate(row.createdAt, `assets[${index}].createdAt`),
     updatedAt: parseDate(row.updatedAt, `assets[${index}].updatedAt`),
+    accruedInterestCurrency:
+      typeof row.accruedInterestCurrency === 'string' && row.accruedInterestCurrency.trim() !== ''
+        ? normalizeCurrency(row.accruedInterestCurrency)
+        : undefined,
     nextExpectedDate: row.nextExpectedDate ? parseDate(row.nextExpectedDate, `assets[${index}].nextExpectedDate`) : undefined,
     nextExpectedCutoffDate: row.nextExpectedCutoffDate ? parseDate(row.nextExpectedCutoffDate, `assets[${index}].nextExpectedCutoffDate`) : undefined,
     nextExpectedCreditDate: row.nextExpectedCreditDate ? parseDate(row.nextExpectedCreditDate, `assets[${index}].nextExpectedCreditDate`) : undefined,

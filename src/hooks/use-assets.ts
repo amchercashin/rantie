@@ -7,9 +7,14 @@ export function useAssets() {
   return assets;
 }
 
-export function useAsset(id: number) {
-  const asset = useLiveQuery(() => db.assets.get(id), [id]);
-  return asset;
+export function useAsset(id: number): Asset | null | undefined {
+  return useLiveQuery(
+    async () => {
+      if (!Number.isFinite(id)) return null;
+      return (await db.assets.get(id)) ?? null;
+    },
+    [id],
+  );
 }
 
 export async function updateAsset(id: number, changes: Partial<Asset>): Promise<void> {

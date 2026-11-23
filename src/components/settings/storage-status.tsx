@@ -39,7 +39,7 @@ export function StorageStatusRow() {
       </span>
       <div className="min-w-0">
         <div className="text-[length:var(--hi-text-body)] leading-snug text-[var(--hi-text)]">{status.title}</div>
-        <div className="mt-0.5 text-[length:var(--hi-text-caption)] leading-relaxed text-[var(--hi-text-3)]">{status.detail}</div>
+        <div className="mt-0.5 text-[length:var(--hi-text-caption)] leading-relaxed text-[var(--hi-text-2)]">{status.detail}</div>
       </div>
     </>
   );

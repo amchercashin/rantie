@@ -5,9 +5,12 @@ import type { PaymentHistory } from '@/models/types';
 
 export function usePaymentHistory(assetId: number) {
   return useLiveQuery(
-    () => db.paymentHistory.where('[assetId+date]')
-      .between([assetId, Dexie.minKey], [assetId, Dexie.maxKey])
-      .toArray(),
+    () =>
+      Number.isFinite(assetId)
+        ? db.paymentHistory.where('[assetId+date]')
+            .between([assetId, Dexie.minKey], [assetId, Dexie.maxKey])
+            .toArray()
+        : [],
     [assetId],
     [],
   );

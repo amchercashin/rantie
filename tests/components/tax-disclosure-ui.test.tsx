@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { IncomeHero } from '@/components/main/income-hero';
@@ -48,6 +48,20 @@ describe('tax disclosure UI', () => {
     expect(screen.getByText('факт')).toBeInTheDocument();
   });
 
+  it('shows exact rubles in SummaryCard annual income below 100 000', () => {
+    const { container } = render(
+      <SummaryCard
+        incomePerMonth={1047}
+        totalValue={200000}
+        yieldPercent={6.3}
+        portfolioSharePercent={10}
+      />,
+    );
+
+    const text = (container.textContent ?? '').replace(/\u00a0/g, ' ');
+    expect(text).toContain('12 564 ₽');
+  });
+
   it('asks for manual payment amounts before NDFL', () => {
     render(
       <AddPaymentForm
@@ -60,6 +74,39 @@ describe('tax disclosure UI', () => {
     );
 
     expect(screen.getByPlaceholderText('До НДФЛ')).toHaveAccessibleName('Сумма выплаты до НДФЛ, RUB');
+  });
+
+  it('saves a morning manual payment dated today at local start of day (<= now)', () => {
+    vi.useFakeTimers();
+    try {
+      const morning = new Date(2026, 10, 23, 9, 15, 0);
+      vi.setSystemTime(morning);
+      const onAdd = vi.fn();
+
+      render(
+        <AddPaymentForm
+          assetId={7}
+          paymentType="rent"
+          currency="RUB"
+          onAdd={onAdd}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByLabelText('Дата выплаты')).toHaveValue('2026-11-23');
+      fireEvent.change(screen.getByPlaceholderText('До НДФЛ'), { target: { value: '50000' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Сохранить выплату' }));
+
+      expect(onAdd).toHaveBeenCalledTimes(1);
+      const saved = onAdd.mock.calls[0][0];
+      expect(saved.date.getTime()).toBeLessThanOrEqual(morning.getTime());
+      expect(saved.date.getFullYear()).toBe(2026);
+      expect(saved.date.getMonth()).toBe(10);
+      expect(saved.date.getDate()).toBe(23);
+      expect(saved.date.getHours()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('explains in settings that payments are stored before tax and income is shown after tax', async () => {

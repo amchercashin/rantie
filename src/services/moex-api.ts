@@ -44,6 +44,18 @@ export interface BondDataResult {
   couponValue: number;
   nextCouponDate: string | null;
   couponPeriod: number;
+  /** Nominal currency (MOEX FACEUNIT, SUR/RUR → RUB). */
+  faceUnit?: string;
+  /** Settlement / NKD currency (MOEX CURRENCYID, SUR/RUR → RUB). */
+  currencyId?: string;
+}
+
+function optionalCurrency(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const code = raw.trim().toUpperCase();
+  if (!code) return undefined;
+  if (code === 'SUR' || code === 'RUR') return 'RUB';
+  return code;
 }
 
 export interface DividendInfo {
@@ -376,7 +388,7 @@ export async function fetchBondData(
     {
       'marketdata.columns': 'SECID,LAST,LCURRENTPRICE',
       'securities.columns':
-        'SECID,PREVPRICE,FACEVALUE,ACCRUEDINT,COUPONVALUE,NEXTCOUPON,COUPONPERIOD',
+        'SECID,PREVPRICE,FACEVALUE,ACCRUEDINT,COUPONVALUE,NEXTCOUPON,COUPONPERIOD,FACEUNIT,CURRENCYID',
     },
   );
   if (!data?.securities) return null;
@@ -385,6 +397,8 @@ export async function fetchBondData(
   const sec = parseISSBlock(data.securities)[0];
   if (!sec) return null;
 
+  const faceUnit = optionalCurrency(sec.FACEUNIT);
+  const currencyId = optionalCurrency(sec.CURRENCYID);
   return {
     currentPrice: (md?.LAST ?? md?.LCURRENTPRICE ?? null) as number | null,
     prevPrice: (sec?.PREVPRICE ?? null) as number | null,
@@ -393,6 +407,8 @@ export async function fetchBondData(
     couponValue: sec.COUPONVALUE as number,
     nextCouponDate: (sec.NEXTCOUPON as string | null) ?? null,
     couponPeriod: sec.COUPONPERIOD as number,
+    ...(faceUnit ? { faceUnit } : {}),
+    ...(currencyId ? { currencyId } : {}),
   };
 }
 
@@ -449,7 +465,11 @@ export function couponRows(rows: Record<string, unknown>[], now: Date): Dividend
   until.setMonth(until.getMonth() + COUPON_SCHEDULE_MONTHS);
   const dated = rows
     .filter((r) => r.coupondate)
-    .map((r) => ({ date: new Date(r.coupondate as string), amount: r.value_rub as number | null | undefined }))
+    .map((r) => {
+      const unit = optionalCurrency(r.faceunit);
+      const amount = (unit && unit !== 'RUB' ? (r.value ?? r.value_rub) : (r.value_rub ?? r.value)) as number | null | undefined;
+      return { date: new Date(r.coupondate as string), amount };
+    })
     .sort((a, b) => a.date.getTime() - b.date.getTime());
   const nearest = dated.find((r) => r.date > now);
   const out: DividendHistoryRow[] = [];
@@ -538,7 +558,7 @@ export async function fetchBatchBondData(
         securities: secids.join(','),
         'marketdata.columns': 'SECID,LAST,LCURRENTPRICE',
         'securities.columns':
-          'SECID,PREVPRICE,FACEVALUE,ACCRUEDINT,COUPONVALUE,NEXTCOUPON,COUPONPERIOD',
+          'SECID,PREVPRICE,FACEVALUE,ACCRUEDINT,COUPONVALUE,NEXTCOUPON,COUPONPERIOD,FACEUNIT,CURRENCYID',
       },
     );
     if (!data?.securities) return result;
@@ -552,6 +572,8 @@ export async function fetchBatchBondData(
       const secid = sec.SECID as string;
       if (!secids.includes(secid)) continue;
       const md = mdMap.get(secid);
+      const faceUnit = optionalCurrency(sec.FACEUNIT);
+      const currencyId = optionalCurrency(sec.CURRENCYID);
       result.set(secid, {
         currentPrice: (md?.LAST ?? md?.LCURRENTPRICE ?? null) as number | null,
         prevPrice: (sec.PREVPRICE ?? null) as number | null,
@@ -560,6 +582,8 @@ export async function fetchBatchBondData(
         couponValue: sec.COUPONVALUE as number,
         nextCouponDate: (sec.NEXTCOUPON as string | null) ?? null,
         couponPeriod: sec.COUPONPERIOD as number,
+        ...(faceUnit ? { faceUnit } : {}),
+        ...(currencyId ? { currencyId } : {}),
       });
     }
   } catch {

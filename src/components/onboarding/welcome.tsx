@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Bot, FileUp, Landmark, LineChart, Lock, PenLine, Sparkles } from 'lucide-react';
 import { db } from '@/db/database';
-import { BrandMark, Wordmark } from '@/components/ds/brand-mark';
+import { BrandMark, RubleSign, Wordmark } from '@/components/ds/brand-mark';
 import { Button } from '@/components/ds/button';
 import { RestoreBackupLink } from '@/components/onboarding/restore-backup-link';
 import { isWelcomeDone, markWelcomeDone } from '@/lib/hints';
@@ -177,7 +177,7 @@ export function Welcome() {
             <span className="hi-numerals-oldstyle font-serif text-[64px] font-light leading-none bg-[linear-gradient(180deg,var(--hi-gold-bright),var(--hi-gold-deep))] bg-clip-text text-transparent">
               47 054
             </span>
-            <span className="text-[32px] font-light text-[var(--hi-gold-deep)]">₽</span>
+            <RubleSign className="text-[32px] text-[var(--hi-gold-deep)]" />
           </div>
           <MiniChart />
           <div className="mt-8">

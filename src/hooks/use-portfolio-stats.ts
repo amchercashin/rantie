@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/database';
-import type { Asset, PortfolioStats, CategoryStats } from '@/models/types';
+import type { Asset, PaymentHistory, PortfolioStats, CategoryStats } from '@/models/types';
 import { calculatePortfolioSnapshot, type CalculatedAssetStats } from '@/services/portfolio-calculator';
 import { projectIncome, incomeTimeline, type ProjectedPayment, type TimelinePoint } from '@/services/income-projection';
 import { getNdflRates } from '@/services/app-settings';
@@ -14,6 +14,7 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
   /** Held currencies with no rate to the ruble (left out of the totals). */
   missingRates: string[];
   assets: Asset[];
+  paymentHistory: PaymentHistory[];
   /** Projected net payments for the next 12 months, soonest first. */
   projection: ProjectedPayment[];
   /** Monthly income history + forecast (only when `withTimeline`). */
@@ -49,6 +50,6 @@ export function usePortfolioStats(options: { withTimeline?: boolean } = {}): {
     };
     const projection = projectIncome(projectionInput);
     const timeline = withTimeline && !isLoading ? incomeTimeline(projectionInput) : [];
-    return { portfolio, categories, assetsById, missingRates, assets: input.assets, projection, timeline, isLoading };
+    return { portfolio, categories, assetsById, missingRates, assets: input.assets, paymentHistory: input.paymentHistory, projection, timeline, isLoading };
   }, [assets, holdings, allHistory, ndflRates, exchangeRates, isLoading, withTimeline]);
 }

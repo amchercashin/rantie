@@ -9,7 +9,7 @@ import { BottomSheet } from '@/components/ds/bottom-sheet';
 import { Button } from '@/components/ds/button';
 import { Field, TextInput, SelectInput, parseDecimal } from '@/components/ds/field';
 import { useFeedback } from '@/components/ds/feedback';
-import { cn, formatCurrencyFull, formatPrice } from '@/lib/utils';
+import { cn, formatMoney, formatPrice } from '@/lib/utils';
 
 interface AddAssetSheetProps {
   open: boolean;
@@ -61,8 +61,22 @@ export function AddAssetSheet({ open, onClose, accountId, existingTypes }: AddAs
       annualIncome: parseDecimal(f.income),
     });
 
-    // Re-use an existing security with the same ticker (shared across accounts).
-    const existing = asset.ticker ? await db.assets.where('ticker').equals(asset.ticker).first() : undefined;
+    // Re-use an existing security with the same ticker or ISIN (shared across accounts).
+    const existing = asset.ticker
+      ? (await db.assets.where('ticker').equals(asset.ticker).first())
+        ?? (await db.assets.where('isin').equals(asset.ticker).first())
+      : asset.isin
+        ? await db.assets.where('isin').equals(asset.isin).first()
+        : undefined;
+
+    if (existing?.id != null) {
+      const dup = await db.holdings.where('[accountId+assetId]').equals([accountId, existing.id]).first();
+      if (dup) {
+        toast('Эта бумага уже есть на счёте — измените количество в списке', 'info');
+        return;
+      }
+    }
+
     const assetId = existing?.id ?? ((await db.assets.add(asset)) as number);
 
     await addHolding({ accountId, assetId, quantity: qty, quantitySource: 'manual', averagePrice });
@@ -148,7 +162,7 @@ export function AddAssetSheet({ open, onClose, accountId, existingTypes }: AddAs
             </div>
             {value > 0 && rate > 0 && (
               <div className="rounded-2xl bg-[var(--hi-gold-tint)] px-4 py-3 text-[length:var(--hi-text-caption)] text-[var(--hi-text-2)]">
-                Доход ≈ <span className="font-semibold text-[var(--hi-gold)]">{formatCurrencyFull((value * rate) / 100 / 12)}</span> в месяц до НДФЛ
+                Доход ≈ <span className="font-semibold text-[var(--hi-gold)]">{formatMoney((value * rate) / 100 / 12, f.currency)}</span> в месяц до НДФЛ
               </div>
             )}
           </>

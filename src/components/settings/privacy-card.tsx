@@ -11,7 +11,7 @@ function Point({ icon, title, children }: { icon: ReactNode; title: string; chil
       </span>
       <div className="min-w-0">
         <div className="text-[length:var(--hi-text-body)] leading-snug text-[var(--hi-text)]">{title}</div>
-        <div className="mt-0.5 text-[length:var(--hi-text-caption)] leading-relaxed text-[var(--hi-text-3)]">{children}</div>
+        <div className="mt-0.5 text-[length:var(--hi-text-caption)] leading-relaxed text-[var(--hi-text-2)]">{children}</div>
       </div>
     </div>
   );
